@@ -1,0 +1,10 @@
+ymc/
+models/
+recordings/
+*.pt
+*.txt
+*.sqlite
+dist/
+venv/
+__pycache__/
+vers/

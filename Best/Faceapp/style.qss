@@ -1,0 +1,85 @@
+/* style.qss */
+QMainWindow {
+    background-color: #f0f0f0; /* Light gray background */
+}
+
+QLabel#VideoLabel {
+    border: 2px solid #4a90e2; /* Blue border for video */
+    border-radius: 5px;
+    background-color: black; /* Black background if no video */
+}
+
+QLabel#StatusLabel {
+    color: #333;
+    font-size: 14px;
+    padding: 5px;
+    border-radius: 3px;
+    background-color: #e0e0e0; /* Slightly darker gray */
+    min-height: 30px; /* Ensure it has some height */
+}
+
+QLabel#StatusLabel[status="success"] {
+    background-color: #d4edda; /* Light green */
+    color: #155724; /* Dark green */
+    border: 1px solid #c3e6cb;
+}
+
+QLabel#StatusLabel[status="error"] {
+    background-color: #f8d7da; /* Light red */
+    color: #721c24; /* Dark red */
+    border: 1px solid #f5c6cb;
+}
+
+QLabel#StatusLabel[status="warning"] {
+    background-color: #fff3cd; /* Light yellow */
+    color: #856404; /* Dark yellow */
+    border: 1px solid #ffeeba;
+}
+
+
+QPushButton {
+    background-color: #4a90e2; /* Blue */
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    font-size: 16px;
+    border-radius: 5px;
+    min-height: 30px;
+}
+
+QPushButton:hover {
+    background-color: #357abd; /* Darker blue */
+}
+
+QPushButton:pressed {
+    background-color: #2a65a0; /* Even darker blue */
+}
+
+QPushButton:disabled {
+    background-color: #cccccc; /* Gray when disabled */
+    color: #666666;
+}
+
+
+QLineEdit {
+    padding: 8px;
+    font-size: 14px;
+    border: 1px solid #cccccc;
+    border-radius: 4px;
+    min-height: 25px;
+}
+
+QLineEdit:focus {
+    border-color: #4a90e2; /* Blue border on focus */
+}
+
+/* Add some spacing between widgets in a QVBoxLayout */
+QWidget > QVBoxLayout > QWidget {
+    margin-bottom: 10px;
+}
+QWidget > QVBoxLayout > QLabel#VideoLabel {
+     margin-bottom: 15px; /* More space below video */
+}
+QWidget > QVBoxLayout > QLabel#StatusLabel {
+     margin-top: 10px; /* More space above status */
+}

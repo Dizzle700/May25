@@ -1,0 +1,13 @@
+[DATABASE]
+db_path = image_db.sqlite
+
+[PROCESSING]
+batch_size = 50
+max_workers = 4
+cache_size = 1000
+similarity_threshold = 0.85
+
+[UI]
+theme = dark
+log_max_lines = 500
+

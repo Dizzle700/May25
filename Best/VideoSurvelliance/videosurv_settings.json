@@ -1,0 +1,12 @@
+{
+    "recording_duration": 30,
+    "recording_dir": "recordings",
+    "recording_codec": "XVID",
+    "recording_resolution": "1280x720",
+    "preview_resolution": "640x480",
+    "sensitivity_thresholds": [
+        10000,
+        5000,
+        2000
+    ]
+}
