@@ -1,0 +1,211 @@
+/* Dark Theme for PyQt6 */
+QMainWindow {
+    background-color: #2b2b2b;
+    color: #f0f0f0;
+}
+
+QWidget {
+    background-color: #2b2b2b;
+    color: #f0f0f0; /* Default text color for widgets */
+    font-size: 10pt;
+}
+
+QLabel {
+    color: #f0f0f0; /* Light text for labels */
+    padding: 2px;
+    min-height: 20px;
+}
+
+QLineEdit, QDateEdit, QTextEdit {
+    background-color: #3c3f41;
+    color: #f0f0f0;
+    border: 1px solid #555555;
+    border-radius: 4px;
+    padding: 8px;
+    min-height: 25px;
+}
+
+QLineEdit:focus, QDateEdit:focus, QTextEdit:focus {
+    border: 1px solid #0078d7; /* Highlight focus */
+}
+
+QPushButton {
+    background-color: #555555; /* Darker buttons */
+    color: #f0f0f0;
+    border: 1px solid #666666;
+    border-radius: 4px;
+    padding: 8px 15px;
+    min-width: 100px;
+    min-height: 30px;
+}
+
+QPushButton:hover {
+    background-color: #666666;
+    border-color: #777777;
+}
+
+QPushButton:pressed {
+    background-color: #444444;
+    border-color: #555555;
+}
+
+QPushButton:disabled {
+    background-color: #404040;
+    color: #808080;
+    border-color: #454545;
+}
+
+QCheckBox {
+    spacing: 5px;
+    color: #f0f0f0;
+}
+
+QCheckBox::indicator {
+    width: 18px;
+    height: 18px;
+    background-color: #3c3f41;
+    border: 1px solid #555555;
+    border-radius: 3px;
+}
+
+QCheckBox::indicator:checked {
+    background-color: #0078d7; /* Blue checkmark */
+    border: 1px solid #005a9e;
+}
+
+QCheckBox::indicator:disabled {
+    background-color: #303030;
+    border: 1px solid #404040;
+}
+
+QProgressBar {
+    border: 1px solid #555555;
+    border-radius: 4px;
+    text-align: center;
+    color: #f0f0f0;
+    background-color: #3c3f41;
+    min-height: 25px;
+}
+
+QProgressBar::chunk {
+    background-color: #0078d7; /* Blue progress */
+    width: 1px; /* Adjust as needed */
+    border-radius: 3px;
+}
+
+QStatusBar {
+    background-color: #252525; /* Even darker status bar */
+    color: #f0f0f0;
+    min-height: 25px;
+}
+
+QStatusBar QLabel {
+    color: #f0f0f0;
+    padding: 3px 5px;
+}
+
+QDateEdit::drop-down {
+    subcontrol-origin: padding;
+    subcontrol-position: top right;
+    width: 20px;
+    border-left: 1px solid #555555;
+    background-color: #444444;
+}
+QDateEdit::down-arrow {
+    /* You might need to provide an image for a custom arrow in dark mode */
+    /* image: url(path/to/your/dark_arrow_icon.png); */
+    width: 12px;
+    height: 12px;
+}
+
+QFormLayout QLabel { /* Ensure labels in form layout are also styled */
+    color: #f0f0f0;
+}
+
+/* Style for QDialog, if needed, can be added here or make it inherit */
+QDialog {
+    background-color: #2b2b2b;
+    color: #f0f0f0;
+}
+
+QDialog QLabel, QDialog QLineEdit, QDialog QPushButton {
+    /* Ensure dialog widgets also pick up the theme */
+    /* Specific overrides might be needed if they don't inherit well */
+}
+
+QTextEdit {
+    background-color: #3c3f41;
+    color: #f0f0f0;
+    border: 1px solid #555555;
+}
+
+/* For AuthCodeDialog specific labels if they need different styling */
+AuthCodeDialog QLabel[objectName="authInfoLabel"] { /* Example if you set objectName */
+    color: #FF6347; /* Tomato Red for important messages, adjust as needed */
+    font-weight: bold;
+}
+
+/* Scrollbars */
+QScrollBar:vertical {
+    border: 1px solid #444;
+    background: #3c3f41;
+    width: 15px;
+    margin: 15px 0 15px 0;
+}
+QScrollBar::handle:vertical {
+    background: #555;
+    min-height: 20px;
+    border-radius: 7px;
+}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    border: 1px solid #444;
+    background: #4f4f4f;
+    height: 14px;
+    subcontrol-position: top;
+    subcontrol-origin: margin;
+}
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+    background: none;
+}
+
+QScrollBar:horizontal {
+    border: 1px solid #444;
+    background: #3c3f41;
+    height: 15px;
+    margin: 0 15px 0 15px;
+}
+QScrollBar::handle:horizontal {
+    background: #555;
+    min-width: 20px;
+    border-radius: 7px;
+}
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+    border: 1px solid #444;
+    background: #4f4f4f;
+    width: 14px;
+    subcontrol-position: left; /* or right */
+    subcontrol-origin: margin;
+}
+QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {
+    background: none;
+}
+
+QMessageBox {
+    background-color: #2b2b2b;
+}
+QMessageBox QLabel {
+    color: #f0f0f0;
+}
+QMessageBox QPushButton {
+    background-color: #555555;
+    color: #f0f0f0;
+    border: 1px solid #666666;
+    padding: 5px 10px; /* Smaller padding for message box buttons */
+    min-width: 80px;
+}
+QMessageBox QPushButton:hover {
+    background-color: #666666;
+}
+QMessageBox QPushButton:pressed {
+    background-color: #444444;
+}

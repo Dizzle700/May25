@@ -5,7 +5,7 @@ import re
 from datetime import datetime, timezone
 import pytz  # For timezone handling
 import threading
-from dotenv import load_dotenv
+import configparser # For INI file handling
 import pandas as pd  # For Excel export
 
 from PyQt6.QtWidgets import (
@@ -29,6 +29,7 @@ from telethon.errors import (
 MAX_FILENAME_LENGTH = 200 # Adjusted for better compatibility
 SETTINGS_ORGANIZATION = "MyCompany" # Or your name/org
 SETTINGS_APPNAME = "TelegramImageDownloader"
+CONFIG_FILE_PATH = "telegram/config.ini" # Path to the INI file
 
 # --- Helper Functions ---
 def sanitize_filename(filename, exclusion_patterns=None):
@@ -85,7 +86,8 @@ class AuthCodeDialog(QDialog):
             "Telegram has sent you a verification code through the app. "
             "Look for a message from 'Telegram' in your chats.")
         auth_info_label.setWordWrap(True)
-        auth_info_label.setStyleSheet("font-weight: bold; color: #D32F2F;")
+        # auth_info_label.setStyleSheet("font-weight: bold; color: #D32F2F;") # Style via QSS
+        auth_info_label.setObjectName("authInfoLabel") # For QSS targeting
         layout.addWidget(auth_info_label)
 
         # Instructions
@@ -136,10 +138,11 @@ class DownloaderWorker(QObject):
     auth_code_needed = pyqtSignal(str)  # New signal for requesting auth code
     auth_password_needed = pyqtSignal(str)  # New signal for requesting 2FA password
     excel_exported = pyqtSignal(str)  # Signal for when Excel is exported
+    worker_started = pyqtSignal() # Signal to indicate worker's run method has started
 
     def __init__(self, settings):
         super().__init__()
-        self.settings = settings
+        self.settings_dict = settings # Renamed to avoid confusion with QSettings
         self.client = None
         self._running = False
         self._paused = False
@@ -156,6 +159,7 @@ class DownloaderWorker(QObject):
         self._paused = False
         self._stop_requested = False
         self.count = 0
+        self.worker_started.emit() # Signal that the worker's run loop is about to start
 
         try:
             # Get a new event loop for this thread
@@ -163,7 +167,7 @@ class DownloaderWorker(QObject):
             asyncio.set_event_loop(self.loop)
             
             # Create and store the task so it can be cancelled
-            self._current_task = self.loop.create_task(self.download_images())
+            self._current_task = self.loop.create_task(self.download_images_async()) # Renamed for clarity
             self.loop.run_until_complete(self._current_task)
         except asyncio.CancelledError:
             self.status_updated.emit("Task was cancelled.")
@@ -179,7 +183,7 @@ class DownloaderWorker(QObject):
             self._current_task.cancel()
             
         if self.loop and self.loop.is_running():
-            asyncio.run_coroutine_threadsafe(self.disconnect_client(), self.loop)
+            asyncio.run_coroutine_threadsafe(self.disconnect_client_async(), self.loop) # Renamed
             self.loop.stop()
             
         self._running = False
@@ -188,29 +192,29 @@ class DownloaderWorker(QObject):
         else:
              self.download_finished.emit(f"Stopped. Downloaded {self.count} images.")
              
-    async def disconnect_client(self):
+    async def disconnect_client_async(self): # Renamed
         if self.client and self.client.is_connected():
             await self.client.disconnect()
             self.status_updated.emit("Disconnected from Telegram.")
 
-    async def download_images(self):
+    async def download_images_async(self): # Renamed
         self.status_updated.emit("Connecting to Telegram...")
         session_name = "telegram_session" # Use a dedicated session file name
         try:
             self.client = TelegramClient(session_name,
-                                         int(self.settings['api_id']),
-                                         self.settings['api_hash'],
+                                         int(self.settings_dict['api_id']),
+                                         self.settings_dict['api_hash'],
                                          loop=self.loop) # Pass the loop
 
             await self.client.connect()
 
             if not await self.client.is_user_authorized():
                 self.status_updated.emit("Authorization needed...")
-                await self.client.send_code_request(self.settings['phone'])
+                await self.client.send_code_request(self.settings_dict['phone'])
                 
                 # Request authentication code from the main GUI thread
                 self._waiting_for_auth = True
-                self.auth_code_needed.emit(self.settings['phone'])
+                self.auth_code_needed.emit(self.settings_dict['phone'])
                 
                 # Wait for the auth code to be set
                 while self._waiting_for_auth and not self._stop_requested:
@@ -222,7 +226,7 @@ class DownloaderWorker(QObject):
                     
                 try:
                     # Try to sign in with the provided code
-                    await self.client.sign_in(self.settings['phone'], self._auth_code)
+                    await self.client.sign_in(self.settings_dict['phone'], self._auth_code)
                 except SessionPasswordNeededError:
                     # 2FA is enabled, request password
                     self._waiting_for_auth = True
@@ -241,16 +245,24 @@ class DownloaderWorker(QObject):
 
             self.status_updated.emit("Fetching channel info...")
             try:
-                channel = await self.client.get_entity(self.settings['channel'])
+                channel = await self.client.get_entity(self.settings_dict['channel'])
             except ValueError: # Often raised for invalid usernames/IDs
                  raise ChannelInvalidError(request=None) # Raise specific error
 
 
-            self.status_updated.emit(f"Starting download from {self.settings['channel']}...")
+            self.status_updated.emit(f"Starting download from {self.settings_dict['channel']}...")
 
             # Convert QDate to timezone-aware datetime (start of day in local timezone, then UTC)
-            start_qdate = self.settings.get('start_date', QDate(2000, 1, 1)) # Default very old date
-            local_tz = pytz.timezone(QSettings(SETTINGS_ORGANIZATION, SETTINGS_APPNAME).value("System/Timezone", "UTC")) # Try to get local tz
+            start_qdate = self.settings_dict.get('start_date', QDate(2000, 1, 1)) # Default very old date
+            # Use QSettings for timezone as it's a system/app level setting, not per-download
+            q_settings = QSettings(SETTINGS_ORGANIZATION, SETTINGS_APPNAME)
+            local_tz_name = q_settings.value("System/Timezone", "UTC")
+            try:
+                local_tz = pytz.timezone(local_tz_name)
+            except pytz.exceptions.UnknownTimeZoneError:
+                self.status_updated.emit(f"Warning: Unknown timezone '{local_tz_name}', defaulting to UTC.")
+                local_tz = pytz.utc
+            
             start_datetime_local = datetime.combine(start_qdate.toPyDate(), datetime.min.time(), tzinfo=local_tz)
             start_datetime_utc = start_datetime_local.astimezone(timezone.utc)
 
@@ -265,8 +277,8 @@ class DownloaderWorker(QObject):
             message_image_count = 0  # Counter for images in the current message
             message_group_counter = 0  # Counter for message groups (for Excel)
 
-            # Get exclusion patterns from settings
-            exclusion_patterns = self.settings.get('exclusion_patterns', [])
+            # Get exclusion patterns from settings_dict
+            exclusion_patterns = self.settings_dict.get('exclusion_patterns', [])
             if exclusion_patterns:
                 self.status_updated.emit(f"Using {len(exclusion_patterns)} exclusion pattern(s)")
 
@@ -311,7 +323,7 @@ class DownloaderWorker(QObject):
 
                     # Try to extract original filename if preserve names is enabled
                     original_filename = None
-                    if self.settings.get('preserve_names', False) and hasattr(message.media, 'photo') and message.media.photo:
+                    if self.settings_dict.get('preserve_names', False) and hasattr(message.media, 'photo') and message.media.photo:
                         # Try to get original filename from attributes
                         if hasattr(message.media.photo, 'attributes'):
                             for attr in message.media.photo.attributes:
@@ -320,7 +332,7 @@ class DownloaderWorker(QObject):
                                     break
 
                     # Create and sanitize filename, add sequence number if multiple images in message
-                    if original_filename and self.settings.get('preserve_names', False):
+                    if original_filename and self.settings_dict.get('preserve_names', False):
                         # Use original filename but add date prefix for uniqueness
                         base_name, ext = os.path.splitext(original_filename)
                         if not ext:
@@ -335,7 +347,7 @@ class DownloaderWorker(QObject):
                     
                     # Apply exclusion patterns to the filename
                     filename_sanitized = sanitize_filename(filename_base, exclusion_patterns) + ext
-                    full_path = os.path.join(self.settings['save_folder'], filename_sanitized)
+                    full_path = os.path.join(self.settings_dict['save_folder'], filename_sanitized)
 
                     try:
                         self.status_updated.emit(f"Downloading: {filename_sanitized}")
@@ -344,7 +356,7 @@ class DownloaderWorker(QObject):
                         self.progress_updated.emit(self.count)
                         
                         # Store image metadata for Excel export
-                        if self.settings.get('export_excel', False):
+                        if self.settings_dict.get('export_excel', False):
                             # Prepare caption for Excel, applying exclusions
                             excel_caption = caption_raw
                             if exclusion_patterns:
@@ -368,7 +380,7 @@ class DownloaderWorker(QObject):
                                 'Caption': excel_caption,
                                 'Filename': filename_sanitized,
                                 'Full Path': full_path,
-                                'Channel': self.settings['channel'],
+                                'Channel': self.settings_dict['channel'],
                                 'Message ID': message.id,
                                 'Image Number': message_image_count,
                                 'Message Group': message_group_counter,
@@ -385,8 +397,8 @@ class DownloaderWorker(QObject):
                 await asyncio.sleep(0.05) # Small delay to prevent flooding
 
             # After download completes, export Excel if needed
-            if self.settings.get('export_excel', False) and not self._stop_requested and self.image_data:
-                await self.export_to_excel()
+            if self.settings_dict.get('export_excel', False) and not self._stop_requested and self.image_data:
+                await self.export_to_excel_async() # Renamed
 
         except (ApiIdInvalidError, ApiIdPublishedFloodError):
             self.error_occurred.emit("Telegram Error", "Invalid API ID or Hash.")
@@ -399,7 +411,7 @@ class DownloaderWorker(QObject):
         except AuthKeyError:
              self.error_occurred.emit("Telegram Error", "Authorization key error. Session might be corrupted or revoked. Try deleting 'telegram_session.session' file.")
         except ChannelInvalidError:
-            self.error_occurred.emit("Telegram Error", f"Cannot find channel '{self.settings['channel']}'. Check username/ID.")
+            self.error_occurred.emit("Telegram Error", f"Cannot find channel '{self.settings_dict['channel']}'. Check username/ID.")
         except FloodWaitError as e:
              self.error_occurred.emit("Telegram Error", f"Flood wait requested by Telegram. Please wait {e.seconds} seconds and try again.")
         except ConnectionError:
@@ -416,7 +428,7 @@ class DownloaderWorker(QObject):
                 self.status_updated.emit("Disconnected.")
             self._running = False
 
-    async def export_to_excel(self):
+    async def export_to_excel_async(self): # Renamed
         """Export the downloaded image metadata to Excel"""
         if not self.image_data:
             self.status_updated.emit("No image data to export.")
@@ -430,9 +442,9 @@ class DownloaderWorker(QObject):
             
             # Generate Excel filename based on channel and date
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            channel_name = self.settings['channel'].replace('@', '').replace('/', '_')
+            channel_name = self.settings_dict['channel'].replace('@', '').replace('/', '_')
             excel_filename = f"telegram_images_{channel_name}_{timestamp}.xlsx"
-            excel_path = os.path.join(self.settings['save_folder'], excel_filename)
+            excel_path = os.path.join(self.settings_dict['save_folder'], excel_filename)
             
             # Create Excel writer
             with pd.ExcelWriter(excel_path, engine='openpyxl') as writer:
@@ -532,8 +544,6 @@ class MainWindow(QMainWindow):
         # --- Settings Form ---
         form_layout = QFormLayout()
 
-        load_dotenv() # Load .env file if it exists
-
         self.api_id_entry = QLineEdit()
         self.api_hash_entry = QLineEdit()
         self.api_hash_entry.setEchoMode(QLineEdit.EchoMode.Password) # Hide hash
@@ -544,15 +554,13 @@ class MainWindow(QMainWindow):
         for widget in [self.api_id_entry, self.api_hash_entry, self.phone_entry, self.channel_entry]:
             widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
-        # Try loading from environment variables first if fields are empty
-        self.api_id_entry.setPlaceholderText("Enter API ID (or set TELEGRAM_API_ID in .env)")
-        self.api_hash_entry.setPlaceholderText("Enter API Hash (or set TELEGRAM_API_HASH in .env)")
-        self.phone_entry.setPlaceholderText("Enter Phone +CountryCode (or set TELEGRAM_PHONE in .env)")
-        self.channel_entry.setPlaceholderText("Enter Channel Username (e.g., @channelname) or ID")
-
-        self.api_id_entry.setText(os.getenv("TELEGRAM_API_ID", ""))
-        self.api_hash_entry.setText(os.getenv("TELEGRAM_API_HASH", ""))
-        self.phone_entry.setText(os.getenv("TELEGRAM_PHONE", ""))
+        self.api_id_entry.setPlaceholderText("API ID (loaded from config.ini)")
+        self.api_hash_entry.setPlaceholderText("API Hash (loaded from config.ini)")
+        self.phone_entry.setPlaceholderText("Phone +CountryCode (loaded from config.ini)")
+        self.channel_entry.setPlaceholderText("Channel Username/ID (loaded from config.ini)")
+        
+        # These fields will be populated by load_settings from config.ini
+        # They are editable so user can change them and save back to config.ini
 
         form_layout.addRow(QLabel("API ID:"), self.api_id_entry)
         form_layout.addRow(QLabel("API Hash:"), self.api_hash_entry)
@@ -647,126 +655,85 @@ class MainWindow(QMainWindow):
         self.update_button_states()
 
     def apply_stylesheet(self):
-        # Basic modern stylesheet (adjust colors as desired)
-        self.setStyleSheet("""
-            QMainWindow {
-                background-color: #f0f0f0; /* Light gray background */
-            }
-            QWidget {
-                font-size: 10pt;
-            }
-            QLineEdit, QDateEdit {
-                padding: 8px;
-                border: 1px solid #cccccc;
-                border-radius: 4px;
-                background-color: white;
-                min-height: 25px;
-            }
-            QPushButton {
-                padding: 8px 15px;
-                border: 1px solid #0078d7; /* Blue border */
-                border-radius: 4px;
-                background-color: #0078d7; /* Blue background */
-                color: white; /* White text */
-                min-width: 100px;
-                min-height: 30px;
-            }
-            QPushButton:hover {
-                background-color: #005a9e; /* Darker blue on hover */
-                border-color: #005a9e;
-            }
-            QPushButton:pressed {
-                background-color: #003a6a; /* Even darker blue when pressed */
-                border-color: #003a6a;
-            }
-            QPushButton:disabled {
-                background-color: #d3d3d3; /* Gray when disabled */
-                border-color: #b0b0b0;
-                color: #808080;
-            }
-            QLabel {
-                padding: 2px;
-                min-height: 20px;
-            }
-            QStatusBar {
-                background-color: #e0e0e0; /* Slightly darker status bar */
-                min-height: 25px;
-            }
-            QStatusBar QLabel { /* Style labels within status bar */
-                 padding: 3px 5px;
-            }
-            QDateEdit::drop-down {
-                 subcontrol-origin: padding;
-                 subcontrol-position: top right;
-                 width: 20px;
-                 border-left: 1px solid #cccccc;
-            }
-            QProgressBar {
-                border: 1px solid #cccccc;
-                border-radius: 4px;
-                text-align: center;
-                min-height: 25px;
-            }
-            QProgressBar::chunk {
-                background-color: #0078d7;
-                width: 1px;
-            }
-            QCheckBox {
-                spacing: 5px;
-            }
-            QCheckBox::indicator {
-                width: 18px;
-                height: 18px;
-            }
-        """)
+        qss_file = "telegram/dark_theme.qss"
+        try:
+            with open(qss_file, "r") as f:
+                self.setStyleSheet(f.read())
+        except FileNotFoundError:
+            print(f"Stylesheet {qss_file} not found. Using default styles.")
+            # Fallback or default styling if QSS is missing
+            # For simplicity, we'll let it use Qt's default if file is missing.
+            pass
+        except Exception as e:
+            print(f"Error loading stylesheet: {e}")
+            # Optionally, show this in status_label if it's initialized
+            # self.status_label.setText(f"Error loading stylesheet: {e}")
+
 
     def get_current_settings(self):
-        """Reads settings from UI fields."""
+        """Reads settings from UI fields and QSettings."""
+        # self.settings is the QSettings object
         return {
             'api_id': self.api_id_entry.text().strip(),
             'api_hash': self.api_hash_entry.text().strip(),
             'phone': self.phone_entry.text().strip(),
             'channel': self.channel_entry.text().strip(),
-            'save_folder': getattr(self, 'save_folder', ''), # Use attribute if set
+            'save_folder': self.settings.value("downloader/save_folder", ""), 
             'start_date': self.date_edit.date(),
             'export_excel': self.export_excel_checkbox.isChecked(),
             'preserve_names': self.preserve_names_checkbox.isChecked(),
-            'exclusion_patterns': getattr(self, 'exclusion_patterns', [])  # Use attribute if set
+            'exclusion_patterns': self.settings.value("downloader/exclusion_patterns_list", [], type=list)
         }
 
-    def validate_settings(self, settings_dict):
+    def validate_settings(self, settings_to_validate):
         """Basic validation of required fields."""
-        required = ['api_id', 'api_hash', 'phone', 'channel', 'save_folder']
-        missing = [field for field in required if not settings_dict.get(field)]
-        if missing:
-            self.show_error("Missing Information", f"Please fill in or select: {', '.join(missing)}")
+        # Fields from config.ini (via UI)
+        required_config_ui = ['api_id', 'api_hash', 'phone', 'channel']
+        missing_config_ui = []
+        for field in required_config_ui:
+            value = settings_to_validate.get(field)
+            if not value or value.startswith("YOUR_") or value == "":
+                missing_config_ui.append(field)
+        
+        if missing_config_ui:
+            self.show_error("Missing Configuration", 
+                            f"Please ensure the following are set correctly in the UI (and saved to '{CONFIG_FILE_PATH}'): "
+                            f"{', '.join(missing_config_ui)}")
             return False
+        
+        # Field from QSettings (GUI selection)
+        if not settings_to_validate.get('save_folder'):
+            self.show_error("Missing Information", "Please select a save folder.")
+            return False
+            
         # Basic check for numeric API ID
-        if not settings_dict['api_id'].isdigit():
+        if not settings_to_validate['api_id'].isdigit():
             self.show_error("Invalid Input", "API ID must be a number.")
             return False
         return True
 
     def start_download(self):
-        current_settings = self.get_current_settings()
-        if not self.validate_settings(current_settings):
+        # Save current UI values to config.ini and QSettings before starting
+        self.save_settings() 
+        
+        current_ui_settings = self.get_current_settings()
+        if not self.validate_settings(current_ui_settings):
             return
-
-        self.save_settings() # Save settings before starting
 
         self.status_label.setText("Starting...")
         self.count_label.setText("Images saved: 0")
         self.progress_bar.setValue(0)  # Reset progress bar
 
         # Create worker and thread
-        self.downloader_worker = DownloaderWorker(current_settings)
+        self.downloader_worker = DownloaderWorker(current_ui_settings) # Pass combined settings
         self.downloader_thread = QThread()
 
         # Move worker to the thread
         self.downloader_worker.moveToThread(self.downloader_thread)
 
         # Connect signals
-        self.downloader_thread.started.connect(self.downloader_worker.run)
+        self.downloader_thread.started.connect(self.downloader_worker.run) # This starts the worker's run method
+        self.downloader_worker.worker_started.connect(self.update_button_states) # Update buttons once worker confirms it's running
         self.downloader_worker.progress_updated.connect(self.update_progress)
         self.downloader_worker.status_updated.connect(self.update_status)
         self.downloader_worker.error_occurred.connect(self.show_error)
@@ -790,26 +757,27 @@ class MainWindow(QMainWindow):
         self.update_button_states() # Disable start, enable stop/pause
 
     def stop_download(self):
-        if self.downloader_worker:
+        if self.downloader_worker and self.downloader_worker.is_running():
             self.status_label.setText("Stopping download...")
             self.downloader_worker.stop()
-            # Update button states immediately to provide feedback
-            self.stop_button.setEnabled(False)
-            self.stop_button.setText("Stopping...")
+        # Update button states to reflect that a stop was requested or worker might be gone.
+        # The worker finishing will also call update_button_states via on_download_finished.
+        self.update_button_states()
+
 
     def toggle_pause_resume(self):
         if not self.downloader_worker or not self.downloader_worker.is_running():
+            self.update_button_states() # Ensure UI is consistent if worker is gone
             return
             
         is_paused = self.downloader_worker.is_paused()
         if is_paused:
             self.downloader_worker.resume()
-            self.pause_resume_button.setText("Pause")
             self.status_label.setText("Resuming download...")
         else:
             self.downloader_worker.pause()
-            self.pause_resume_button.setText("Resume")
             self.status_label.setText("Pausing download...")
+        self.update_button_states() # Update UI to reflect new pause/resume state
 
     def update_progress(self, count):
         self.count_label.setText(f"Images saved: {count}")
@@ -869,70 +837,127 @@ class MainWindow(QMainWindow):
         self.exclusion_button.setEnabled(not is_running)
 
     def select_folder(self):
-        folder = QFileDialog.getExistingDirectory(self, "Select Save Folder")
+        # Use QSettings to remember the last used directory for the dialog
+        last_folder = self.settings.value("downloader/last_folder_dialog_path", os.path.expanduser("~"))
+        folder = QFileDialog.getExistingDirectory(self, "Select Save Folder", last_folder)
         if folder:
-            self.save_folder = folder # Store path in attribute
             self.folder_label.setText(f"Save to: {folder}")
-            self.settings.setValue("downloader/save_folder", folder) # Save immediately
+            self.settings.setValue("downloader/save_folder", folder) # Save immediately to QSettings
+            self.settings.setValue("downloader/last_folder_dialog_path", folder) # Remember for next time
 
     def load_settings(self):
-        # Load text fields, using existing text (from .env) as default if setting not found
-        self.api_id_entry.setText(self.settings.value("telegram/api_id", self.api_id_entry.text()))
-        self.api_hash_entry.setText(self.settings.value("telegram/api_hash", self.api_hash_entry.text()))
-        self.phone_entry.setText(self.settings.value("telegram/phone", self.phone_entry.text()))
-        self.channel_entry.setText(self.settings.value("downloader/channel", ""))
+        # --- Load from config.ini ---
+        config = configparser.ConfigParser()
+        # Create config file with defaults if it doesn't exist
+        if not os.path.exists(CONFIG_FILE_PATH):
+            self._create_default_config(config) # This also writes the file
+        else:
+            try:
+                config.read(CONFIG_FILE_PATH)
+            except configparser.Error as e:
+                self.show_error("Config Read Error", f"Error reading {CONFIG_FILE_PATH}: {e}\nUsing default placeholders.")
+                self._create_default_config(config) # Recreate with defaults if corrupt
 
-        # Load folder
+        # Helper to get from config or return default
+        def get_config_value(section, key, default=""):
+            if config.has_option(section, key):
+                return config.get(section, key)
+            return default
+
+        self.api_id_entry.setText(get_config_value("Telegram", "api_id", "YOUR_API_ID"))
+        self.api_hash_entry.setText(get_config_value("Telegram", "api_hash", "YOUR_API_HASH"))
+        self.phone_entry.setText(get_config_value("Telegram", "phone", "YOUR_PHONE_NUMBER"))
+        self.channel_entry.setText(get_config_value("Downloader", "channel", "YOUR_CHANNEL_USERNAME_OR_ID"))
+
+        # --- Load from QSettings (GUI specific settings) ---
+        # QSettings object is self.settings
         folder = self.settings.value("downloader/save_folder", "")
-        if folder and os.path.isdir(folder): # Check if saved folder still exists
-             self.save_folder = folder
+        if folder and os.path.isdir(folder):
              self.folder_label.setText(f"Save to: {folder}")
         else:
              self.folder_label.setText("No folder selected.")
+             if folder: # If it was set but invalid, clear it
+                self.settings.remove("downloader/save_folder")
 
-        # Load date
+
         date_str = self.settings.value("downloader/start_date", "")
         if date_str:
             saved_date = QDate.fromString(date_str, Qt.DateFormat.ISODate)
             if saved_date.isValid():
                 self.date_edit.setDate(saved_date)
-        # Else keep the default (1 month ago)
+        # Else keep the default (1 month ago from init_ui)
         
-        # Load export Excel preference
-        export_excel = self.settings.value("downloader/export_excel", False)
-        # Convert to bool (QSettings may store as string)
-        if isinstance(export_excel, str):
-            export_excel = export_excel.lower() == 'true'
-        self.export_excel_checkbox.setChecked(bool(export_excel))
+        export_excel = self.settings.value("downloader/export_excel", False, type=bool)
+        self.export_excel_checkbox.setChecked(export_excel)
 
-        # Load preserve names preference
-        preserve_names = self.settings.value("downloader/preserve_names", False)
-        # Convert to bool (QSettings may store as string)
-        if isinstance(preserve_names, str):
-            preserve_names = preserve_names.lower() == 'true'
-        self.preserve_names_checkbox.setChecked(bool(preserve_names))
+        preserve_names = self.settings.value("downloader/preserve_names", False, type=bool)
+        self.preserve_names_checkbox.setChecked(preserve_names)
 
-        # Load exclusion patterns
-        pattern_text = self.settings.value("downloader/exclusion_patterns", "")
-        self.exclusion_patterns = []
-        if pattern_text:
-            for line in pattern_text.splitlines():
-                line = line.strip()
-                if line and not line.startswith('#'):
-                    self.exclusion_patterns.append(line)
+        # Load exclusion patterns (stored as a list of strings in QSettings)
+        # self.exclusion_patterns_list is used by get_current_settings and open_exclusion_dialog
+        # No need to explicitly set an attribute here, open_exclusion_dialog will load from QSettings
+        # and get_current_settings will read from QSettings.
+
+
+    def _create_default_config(self, config_parser_instance):
+        """Creates a default config.ini file if it doesn't exist or is needed."""
+        self.status_label.setText(f"Creating/Resetting default config: {CONFIG_FILE_PATH}")
+        config_parser_instance.remove_section('Telegram') # Clear existing if any
+        config_parser_instance.remove_section('Downloader') # Clear existing if any
+        config_parser_instance['Telegram'] = {
+            'api_id': 'YOUR_API_ID',
+            'api_hash': 'YOUR_API_HASH',
+            'phone': 'YOUR_PHONE_NUMBER'
+        }
+        config_parser_instance['Downloader'] = {
+            'channel': 'YOUR_CHANNEL_USERNAME_OR_ID'
+            # Other downloader settings are in QSettings
+        }
+        try:
+            # Ensure directory exists
+            os.makedirs(os.path.dirname(CONFIG_FILE_PATH), exist_ok=True)
+            with open(CONFIG_FILE_PATH, 'w') as configfile:
+                config_parser_instance.write(configfile)
+            # No pop-up here, message shown if called during initial load_settings
+        except IOError as e:
+            self.show_error("Config Error", f"Could not create/write config file {CONFIG_FILE_PATH}: {e}")
+
 
     def save_settings(self):
-        self.settings.setValue("telegram/api_id", self.api_id_entry.text().strip())
-        self.settings.setValue("telegram/api_hash", self.api_hash_entry.text().strip()) # Hash is saved, consider security implications
-        self.settings.setValue("telegram/phone", self.phone_entry.text().strip())
-        self.settings.setValue("downloader/channel", self.channel_entry.text().strip())
-        if hasattr(self, 'save_folder') and self.save_folder:
-            self.settings.setValue("downloader/save_folder", self.save_folder)
+        # --- Save to config.ini ---
+        config = configparser.ConfigParser()
+        # Read existing config to preserve other settings or comments if any
+        # This is important if users manually add other sections/keys
+        if os.path.exists(CONFIG_FILE_PATH):
+            try:
+                config.read(CONFIG_FILE_PATH)
+            except configparser.Error as e:
+                 self.show_error("Config Read Error", f"Could not read {CONFIG_FILE_PATH} before saving, some settings might be lost: {e}")
+                 # Proceed to create new sections if they don't exist
+        
+        if not config.has_section('Telegram'):
+            config.add_section('Telegram')
+        config.set('Telegram', 'api_id', self.api_id_entry.text().strip())
+        config.set('Telegram', 'api_hash', self.api_hash_entry.text().strip())
+        config.set('Telegram', 'phone', self.phone_entry.text().strip())
+
+        if not config.has_section('Downloader'):
+            config.add_section('Downloader')
+        config.set('Downloader', 'channel', self.channel_entry.text().strip())
+        
+        try:
+            os.makedirs(os.path.dirname(CONFIG_FILE_PATH), exist_ok=True)
+            with open(CONFIG_FILE_PATH, 'w') as configfile:
+                config.write(configfile)
+        except IOError as e:
+            self.show_error("Config Save Error", f"Could not save to config file {CONFIG_FILE_PATH}: {e}")
+
+        # --- Save to QSettings (GUI specific settings) ---
+        # save_folder is saved directly in select_folder
         self.settings.setValue("downloader/start_date", self.date_edit.date().toString(Qt.DateFormat.ISODate))
         self.settings.setValue("downloader/export_excel", self.export_excel_checkbox.isChecked())
         self.settings.setValue("downloader/preserve_names", self.preserve_names_checkbox.isChecked())
-
-        # Exclusion patterns are saved directly in the open_exclusion_dialog method
+        # exclusion_patterns_list is saved in open_exclusion_dialog
 
     def request_auth_code(self, phone):
         """Show a dialog to request the Telegram authentication code"""
@@ -1048,22 +1073,36 @@ class MainWindow(QMainWindow):
 
     def show_welcome_message(self):
         """Show a welcome message with setup instructions if needed"""
-        # Check if API credentials are missing
-        if not self.api_id_entry.text() or not self.api_hash_entry.text():
-            QMessageBox.information(
-                self,
-                "Welcome to Telegram Image Downloader",
-                "To use this app, you need Telegram API credentials.\n\n"
-                "How to get your API credentials:\n"
-                "1. Visit https://my.telegram.org/ and log in\n"
-                "2. Click on 'API development tools'\n"
-                "3. Create a new application with any name and description\n"
-                "4. You will receive an 'App api_id' and 'App api_hash'\n"
-                "5. Enter these values in the appropriate fields in this app\n\n"
-                "Your phone number should be in international format (e.g., +1234567890)\n\n"
-                "The channel should be a public channel username (e.g., @channelname) or a private channel ID\n\n"
-                "Your credentials will be saved for future use."
-            )
+        # Check if API credentials in UI (loaded from config.ini) are placeholders
+        api_id_is_placeholder = not self.api_id_entry.text() or self.api_id_entry.text().startswith("YOUR_")
+        api_hash_is_placeholder = not self.api_hash_entry.text() or self.api_hash_entry.text().startswith("YOUR_")
+
+        if api_id_is_placeholder or api_hash_is_placeholder:
+            if not os.path.exists(CONFIG_FILE_PATH):
+                 # This message is more for the very first run if config doesn't exist yet
+                 QMessageBox.information(
+                    self,
+                    "Configuration File Created",
+                    f"A new configuration file '{CONFIG_FILE_PATH}' has been created.\n\n"
+                    "Please edit it with your Telegram API ID, API Hash, Phone Number, and target Channel.\n\n"
+                    "You can also enter these details directly in the app's input fields and they will be saved to the config file."
+                )
+            else:
+                # Config exists, but has placeholder values
+                QMessageBox.information(
+                    self,
+                    "Welcome to Telegram Image Downloader",
+                    f"To use this app, you need to configure your Telegram API credentials in '{CONFIG_FILE_PATH}' "
+                    "or enter them in the fields below (they will be saved to the config file).\n\n"
+                    "How to get your API credentials:\n"
+                    "1. Visit https://my.telegram.org/ and log in\n"
+                    "2. Click on 'API development tools'\n"
+                    "3. Create a new application (any name/description)\n"
+                    "4. You will receive an 'App api_id' and 'App api_hash'\n"
+                    "5. Enter these into '{CONFIG_FILE_PATH}' or the app fields.\n\n"
+                    "Your phone number should be in international format (e.g., +1234567890).\n"
+                    "The channel should be a public channel username (e.g., @channelname) or a private channel ID."
+                )
 
     def resizeEvent(self, event):
         """Handle window resize event"""
@@ -1083,31 +1122,32 @@ class MainWindow(QMainWindow):
 
     def open_exclusion_dialog(self):
         """Open the dialog to manage exclusion patterns"""
-        # Get current patterns from settings
-        current_patterns = self.settings.value("downloader/exclusion_patterns", "")
+        # Load patterns from QSettings (stored as a list of strings)
+        current_patterns_list = self.settings.value("downloader/exclusion_patterns_list", [], type=list)
+        current_patterns_text = "\n".join(current_patterns_list) # Convert list to text for editor
         
         # Create and show the dialog
-        dialog = ExclusionPatternDialog(self, current_patterns)
+        dialog = ExclusionPatternDialog(self, current_patterns_text)
         if dialog.exec() == QDialog.DialogCode.Accepted:
-            # Save the patterns
-            self.exclusion_patterns = dialog.get_active_patterns()
-            pattern_text = dialog.get_patterns()
-            self.settings.setValue("downloader/exclusion_patterns", pattern_text)
+            # Get active patterns as a list from the dialog
+            active_patterns_list = dialog.get_active_patterns() 
+            # Save the list of active patterns to QSettings
+            self.settings.setValue("downloader/exclusion_patterns_list", active_patterns_list)
             
             # Show confirmation
-            count = len(self.exclusion_patterns)
+            count = len(active_patterns_list)
             self.status_label.setText(f"Saved {count} exclusion pattern{'s' if count != 1 else ''}")
             
 
 # --- Exclusion Pattern Dialog ---
 class ExclusionPatternDialog(QDialog):
-    def __init__(self, parent=None, exclusion_patterns=None):
+    def __init__(self, parent=None, exclusion_patterns_text=None): # Takes text
         super().__init__(parent)
         self.setWindowTitle("Exclusion Patterns")
         self.setMinimumSize(600, 500)  # Increased size for preview area
         
-        # Initialize with existing patterns or empty string
-        self.exclusion_patterns = exclusion_patterns or ""
+        # Initialize with existing patterns text or empty string
+        self.exclusion_patterns_text = exclusion_patterns_text or ""
         
         layout = QVBoxLayout(self)
         
@@ -1139,7 +1179,7 @@ class ExclusionPatternDialog(QDialog):
         pattern_editor_layout.addWidget(QLabel("Exclusion Patterns:"))
         self.pattern_editor = QTextEdit()
         self.pattern_editor.setPlaceholderText("Enter exclusion patterns here, one per line...")
-        self.pattern_editor.setText(self.exclusion_patterns)
+        self.pattern_editor.setText(self.exclusion_patterns_text) # Use text here
         self.pattern_editor.textChanged.connect(self.update_preview)
         pattern_editor_layout.addWidget(self.pattern_editor)
         editor_layout.addLayout(pattern_editor_layout)
