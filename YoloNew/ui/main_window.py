@@ -1,7 +1,8 @@
 from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QListWidget, QPushButton, QLabel, QSplitter,
                              QStatusBar, QProgressBar, QSpinBox, QFileDialog,
-                             QListWidgetItem, QMessageBox, QLineEdit, QFrame)
+                             QListWidgetItem, QMessageBox, QLineEdit, QFrame,
+                             QMenu, QAction)
 from PyQt6.QtCore import Qt, pyqtSignal, QPoint, QTimer, QMimeData
 from PyQt6.QtGui import QKeySequence, QShortcut, QDrag, QPixmap, QPainter, QFont, QColor
 import os
@@ -96,6 +97,9 @@ class MainWindow(QMainWindow):
         self.auto_save_indicator_timer = QTimer(self)
         self.auto_save_indicator_timer.timeout.connect(self._hide_auto_save_indicator)
         self.auto_save_indicator_timer.setSingleShot(True)
+
+        self.resize_size = 640  # Default
+        self.init_menu()
 
     def set_app_logic(self, logic):
         """Connects the main window to the application logic."""
@@ -746,3 +750,30 @@ class MainWindow(QMainWindow):
         if self.app_logic:
             self.app_logic.set_augmentation_settings(settings)
             self.status_bar.showMessage("Augmentation settings updated", 3000)
+
+    def init_menu(self):
+        menubar = self.menuBar()
+        resize_menu = menubar.addMenu("Resize Images")
+
+        action_640 = QAction("Resize to 640x640", self)
+        action_640.triggered.connect(lambda: self.set_resize_size(640))
+        resize_menu.addAction(action_640)
+
+        action_1280 = QAction("Resize to 1280x1280", self)
+        action_1280.triggered.connect(lambda: self.set_resize_size(1280))
+        resize_menu.addAction(action_1280)
+
+        process_action = QAction("Process Folder...", self)
+        process_action.triggered.connect(self.process_folder)
+        resize_menu.addAction(process_action)
+
+    def set_resize_size(self, size):
+        self.resize_size = size
+        QMessageBox.information(self, "Resize Size", f"Set resize to {size}x{size}")
+
+    def process_folder(self):
+        folder = QFileDialog.getExistingDirectory(self, "Select Image Folder")
+        if folder:
+            from core.image_utils import resize_and_crop_folder
+            resize_and_crop_folder(folder, self.resize_size)
+            QMessageBox.information(self, "Done", f"Images resized to {self.resize_size}x{self.resize_size}")

@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BrickVisualizer3D Pro</title>
+    <style>
+        body { margin: 0; font-family: Arial, sans-serif; display: flex; flex-direction: column; align-items: center; background-color: #e0e0e0; color: #333; }
+        h1 { text-align: center; color: #2c3e50; width: 100%; margin-top: 20px; margin-bottom: 10px; font-size: 1.8em;}
+
+        #app-container {
+            display: flex;
+            flex-direction: row;
+            width: 98%;
+            max-width: 1600px;
+            margin-top: 10px;
+            gap: 20px; /* For spacing between panels */
+        }
+
+        #controls-panel {
+            padding: 20px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            margin-right: 0; /* Handled by gap in app-container */
+            width: 380px; /* Slightly wider */
+            min-width: 320px;
+            box-shadow: 0 2px 15px rgba(0,0,0,0.1);
+            align-self: flex-start; /* Keep it at the top when content below grows */
+        }
+        #controls-panel h2 { margin-top: 0; font-size: 1.3em; color: #34495e; border-bottom: 2px solid #bdc3c7; padding-bottom: 8px;}
+        #controls-panel h3 { font-size: 1.1em; margin-bottom: 10px; margin-top: 20px; color: #2980b9;}
+
+        .input-group {
+            margin-bottom: 15px;
+            display: flex;
+            flex-wrap: wrap; /* Allow wrapping for label and input */
+            align-items: center;
+            position: relative; /* For error message positioning */
+        }
+        .input-group label {
+            display: inline-block;
+            width: 100%; /* Full width for label initially */
+            max-width: 190px; /* Max width for label */
+            font-size: 0.9em;
+            color: #555;
+            margin-bottom: 5px;
+            margin-right: 10px; /* Space between label and input if on same line */
+        }
+        .input-group input, .input-group select {
+            flex-grow: 1; /* Allow input to take remaining space */
+            min-width: 120px; /* Minimum width for input */
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 0.9em;
+            box-sizing: border-box;
+        }
+        .error-message {
+            font-size: 0.8em;
+            color: #e74c3c;
+            width: 100%;
+            padding-left: 0; /* Align with input field usually */
+            margin-top: 2px;
+            display: block; /* Make it take its own line */
+        }
+
+        #visualizeButton {
+            background-color: #3498db; color: white; padding: 12px 18px; border: none;
+            border-radius: 5px; cursor: pointer; font-size: 1.05em; width: 100%; margin-top: 20px;
+            transition: background-color 0.2s ease;
+        }
+        #visualizeButton:hover { background-color: #2980b9; }
+
+        #canvas-container {
+            flex-grow: 1;
+            min-height: 500px; /* Minimum height */
+            height: 80vh; /* Responsive height */
+            max-height: 700px; /* Max height to prevent excessive stretching */
+            border: 1px solid #bdc3c7;
+            background-color: #ffffff;
+            position: relative;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+
+        #results {
+            margin-top: 20px; padding: 15px; background-color: #eaf2f8;
+            border: 1px solid #aed6f1; border-radius: 4px;
+        }
+        #results p { margin: 8px 0; font-size: 1.1em; color: #2c3e50; }
+        #brickCount, #wallThicknessResult { font-weight: bold; color: #27ae60; }
+
+        #loading-indicator {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            font-size: 1.5em; color: #555; display: none;
+            z-index: 10; /* Ensure it's above the canvas */
+        }
+        .spinner {
+            border: 6px solid #f3f3f3; /* Light grey */
+            border-top: 6px solid #3498db; /* Blue */
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 900px) {
+            #app-container {
+                flex-direction: column;
+                align-items: center; /* Center items when stacked */
+            }
+            #controls-panel {
+                width: 95%;
+                max-width: 500px; /* Limit width even on medium-small screens */
+                margin-right: 0;
+                margin-bottom: 20px; /* Space below controls when stacked */
+            }
+            #canvas-container {
+                width: 95%;
+                max-width: 700px; /* Limit width of canvas too */
+                height: 60vh; /* Adjust height for smaller screens */
+            }
+             .input-group label {
+                max-width: none; /* Allow label to take more space if needed */
+            }
+        }
+        @media (max-width: 480px) {
+            h1 { font-size: 1.5em; }
+            #controls-panel { padding: 15px; }
+            #controls-panel h2 { font-size: 1.2em; }
+            #controls-panel h3 { font-size: 1em; }
+            .input-group input, .input-group select { padding: 6px; }
+             #visualizeButton { padding: 10px 15px; font-size: 1em; }
+        }
+
+    </style>
+</head>
+<body>
+    <h1>Улучшенный Визуализатор и Калькулятор Кирпича</h1>
+
+    <div id="app-container">
+        <div id="controls-panel">
+            <h2>Параметры</h2>
+
+            <h3>Размеры дома (мм):</h3>
+            <div class="input-group">
+                <label for="houseLength">Длина дома (L):</label>
+                <input type="number" id="houseLength" value="6000" min="100">
+                <span class="error-message" id="houseLengthError"></span>
+            </div>
+            <div class="input-group">
+                <label for="houseWidth">Ширина дома (W):</label>
+                <input type="number" id="houseWidth" value="5000" min="100">
+                <span class="error-message" id="houseWidthError"></span>
+            </div>
+            <div class="input-group">
+                <label for="houseHeight">Высота стен (H):</label>
+                <input type="number" id="houseHeight" value="3000" min="100">
+                <span class="error-message" id="houseHeightError"></span>
+            </div>
+
+            <h3>Параметры кирпича (мм):</h3>
+            <div class="input-group">
+                <label for="brickLength">Длина кирпича (l):</label>
+                <input type="number" id="brickLength" value="250" min="1">
+                <span class="error-message" id="brickLengthError"></span>
+            </div>
+            <div class="input-group">
+                <label for="brickWidth">Ширина кирпича (w):</label>
+                <input type="number" id="brickWidth" value="120" min="1">
+                <span class="error-message" id="brickWidthError"></span>
+            </div>
+            <div class="input-group">
+                <label for="brickHeight">Высота кирпича (h):</label>
+                <input type="number" id="brickHeight" value="65" min="1">
+                <span class="error-message" id="brickHeightError"></span>
+            </div>
+
+            <h3>Кладочный шов (мм):</h3>
+            <div class="input-group">
+                <label for="mortarJoint">Толщина шва:</label>
+                <input type="number" id="mortarJoint" value="10" min="0"> <!-- Allow 0 for dry stacking viz -->
+                <span class="error-message" id="mortarJointError"></span>
+            </div>
+
+            <h3>Тип кладки:</h3>
+            <div class="input-group">
+                <label for="wallType">Выберите тип:</label>
+                <select id="wallType">
+                    <option value="HalfBrick">В полкирпича</option>
+                    <option value="OneBrick">В один кирпич</option>
+                    <option value="OnePointFiveBrick">В 1,5 кирпича</option>
+                    <option value="TwoBrick">В 2 кирпича</option>
+                </select>
+                <span class="error-message" id="wallTypeError"></span> <!-- Just in case -->
+            </div>
+
+            <button id="visualizeButton">Визуализировать и Рассчитать</button>
+
+            <div id="results">
+                <p>Расчетная толщина стены: <span id="wallThicknessResult">0</span> мм</p>
+                <p>Общее количество кирпичей: <span id="brickCount">0</span></p>
+            </div>
+        </div>
+
+        <div id="canvas-container">
+            <div id="loading-indicator"><div class="spinner"></div></div>
+        </div>
+    </div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        let scene, camera, renderer, controls;
+        let bricksGroup;
+        const brickMaterial = new THREE.MeshStandardMaterial({ 
+            color: 0xcc7744, 
+            roughness: 0.9, // More rough
+            metalness: 0.05 
+        });
+        const loadingIndicator = document.getElementById('loading-indicator');
+
+        // Constants
+        const MIN_BRICK_PART_VISUAL_LENGTH = 20; // Minimum visual length for a brick fragment (mm)
+
+        function init() {
+            const canvasContainer = document.getElementById('canvas-container');
+
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xdde1e6); // Lighter background
+
+            camera = new THREE.PerspectiveCamera(50, canvasContainer.clientWidth / canvasContainer.clientHeight, 10, 150000); // Adjusted FOV, far plane
+            camera.position.set(8000, 5000, 9000);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true }); // Alpha for potential background CSS
+            renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Softer shadows
+            // renderer.physicallyCorrectLights = true; // Deprecated, use renderer.useLegacyLights = false;
+            renderer.useLegacyLights = false; // For more realistic light falloff with PBR materials
+
+            canvasContainer.appendChild(renderer.domElement);
+
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.8); // Slightly stronger ambient
+            scene.add(ambientLight);
+            
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 2.5); // Stronger directional
+            directionalLight.position.set(0.6, 1, 0.8).normalize().multiplyScalar(10000); // Adjusted position
+            directionalLight.castShadow = true;
+            scene.add(directionalLight);
+            
+            directionalLight.shadow.mapSize.width = 2048;
+            directionalLight.shadow.mapSize.height = 2048;
+            directionalLight.shadow.camera.near = 500;
+            directionalLight.shadow.camera.far = 30000; // Increased far for larger scenes
+            const shadowCamSize = 12000; // Adjusted shadow camera frustum
+            directionalLight.shadow.camera.left = -shadowCamSize;
+            directionalLight.shadow.camera.right = shadowCamSize;
+            directionalLight.shadow.camera.top = shadowCamSize;
+            directionalLight.shadow.camera.bottom = -shadowCamSize;
+            directionalLight.shadow.bias = -0.0005; // Helps with shadow acne
+
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.minDistance = 500;
+            controls.maxDistance = 80000; // Increased max distance
+            controls.target.set(0, 1500, 0); // Initial target, will be updated
+
+            bricksGroup = new THREE.Group();
+            scene.add(bricksGroup);
+            
+            // Ground with a simple procedural texture
+            const groundCanvas = document.createElement('canvas');
+            groundCanvas.width = 64;
+            groundCanvas.height = 64;
+            const ctx = groundCanvas.getContext('2d');
+            ctx.fillStyle = '#c5c5c0'; // Light stone/concrete
+            ctx.fillRect(0, 0, 64, 64);
+            ctx.fillStyle = '#bababa'; // Slightly darker for pattern
+            for (let i = 0; i < 64; i += 8) {
+                for (let j = 0; j < 64; j += 8) {
+                    if ((i / 8 + j / 8) % 2 === 0) {
+                        ctx.fillRect(i, j, 8, 8);
+                    }
+                }
+            }
+            const groundTexture = new THREE.CanvasTexture(groundCanvas);
+            groundTexture.wrapS = THREE.RepeatWrapping;
+            groundTexture.wrapT = THREE.RepeatWrapping;
+            groundTexture.repeat.set(100, 100); // How many times texture repeats
+
+            const groundGeometry = new THREE.PlaneGeometry(120000, 120000); // Larger ground
+            const groundMaterial = new THREE.MeshStandardMaterial({ 
+                map: groundTexture,
+                roughness: 0.95,
+                metalness: 0.0
+            });
+            const groundMesh = new THREE.Mesh(groundGeometry, groundMaterial);
+            groundMesh.rotation.x = -Math.PI / 2;
+            groundMesh.position.y = -params.brickH / 2 - params.mortar; // Position just below first row of bricks (initial rough guess)
+            groundMesh.receiveShadow = true;
+            scene.add(groundMesh);
+            // Store groundMesh globally to update its Y position later
+            window.groundMesh = groundMesh; 
+
+
+            window.addEventListener('resize', onWindowResize, false);
+            animate();
+        }
+
+        function onWindowResize() {
+            const canvasContainer = document.getElementById('canvas-container');
+            if (!canvasContainer) return;
+            camera.aspect = canvasContainer.clientWidth / canvasContainer.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        function getInputValues() {
+            const ids = ['houseLength', 'houseWidth', 'houseHeight', 'brickLength', 'brickWidth', 'brickHeight', 'mortarJoint'];
+            const inputs = {};
+            let isValid = true;
+
+            // Clear previous errors
+            document.querySelectorAll('.error-message').forEach(el => el.textContent = '');
+
+            ids.forEach(id => {
+                const inputEl = document.getElementById(id);
+                const errorEl = document.getElementById(`${id}Error`);
+                let value = parseFloat(inputEl.value);
+                
+                if (isNaN(value) || value < (inputEl.min ? parseFloat(inputEl.min) : 0) || (id.startsWith('brick') && value <=0) ) {
+                     if (value <= 0 && (id.startsWith('brick') || id.startsWith('house'))) {
+                        errorEl.textContent = `Значение должно быть положительным.`;
+                     } else if (isNaN(value)) {
+                        errorEl.textContent = `Введите число.`;
+                     } else {
+                        errorEl.textContent = `Минимальное значение: ${inputEl.min}.`;
+                     }
+                    isValid = false;
+                }
+                inputs[id.replace(/([A-Z])/g, '$1').toLowerCase().replace('house', 'house').replace('brick', 'brick').replace('joint', '')] = value; // e.g. houseLength -> houselength
+            });
+            
+            // Remap keys to match original param names (e.g., houselength to houseL)
+            const params = {
+                houseL: inputs.houselength,
+                houseW: inputs.housewidth,
+                houseH: inputs.househeight,
+                brickL: inputs.bricklength,
+                brickW: inputs.brickwidth,
+                brickH: inputs.brickheight,
+                mortar: inputs.mortar,
+                wallType: document.getElementById('wallType').value
+            };
+
+            // Additional logical validation
+            if (params.brickL < params.brickW && isValid) {
+                document.getElementById('brickLengthError').textContent = 'Длина кирпича обычно больше ширины.';
+                // isValid = false; // Could be a warning, not strictly invalid
+            }
+            if (params.brickH >= params.brickL || params.brickH >= params.brickW && isValid) {
+                 document.getElementById('brickHeightError').textContent = 'Высота кирпича не должна превышать длину/ширину.';
+                // isValid = false; // Could be a warning
+            }
+
+
+            return isValid ? params : null;
+        }
+        
+        function clearScene() {
+             while (bricksGroup.children.length > 0) {
+                const wall = bricksGroup.children[0]; // Each child is a wall group
+                while (wall.children.length > 0) {
+                    const brick = wall.children[0];
+                    wall.remove(brick);
+                    if (brick.geometry) brick.geometry.dispose();
+                    // Material is shared, so no need to dispose it per brick
+                }
+                bricksGroup.remove(wall);
+            }
+        }
+        
+        function createBrickInstance(length, height, depth) {
+            if (length <=0 || height <=0 || depth <=0) return null;
+            const geometry = new THREE.BoxGeometry(length, height, depth);
+            // Reuse the same material for all bricks for performance
+            const brickMesh = new THREE.Mesh(geometry, brickMaterial);
+            brickMesh.castShadow = true;
+            brickMesh.receiveShadow = true; // Bricks can receive shadows from other bricks
+            return brickMesh;
+        }
+
+        function getActualWallThickness(params) {
+            switch (params.wallType) {
+                case 'HalfBrick': return params.brickW;
+                case 'OneBrick': return params.brickL;
+                case 'OnePointFiveBrick': return params.brickL + params.mortar + params.brickW;
+                case 'TwoBrick': return params.brickL + params.mortar + params.brickL;
+                default: return params.brickW;
+            }
+        }
+        
+        function calculateTotalBricks(params, actualWallThickness) {
+            const houseL_m = params.houseL / 1000;
+            const houseW_m = params.houseW / 1000;
+            const houseH_m = params.houseH / 1000;
+            const brickL_m = params.brickL / 1000;
+            const brickH_m = params.brickH / 1000;
+            const mortar_m = params.mortar / 1000;
+            const actualWallThickness_m = actualWallThickness / 1000;
+
+            let sideWallLength_m = houseW_m - 2 * actualWallThickness_m;
+            if (sideWallLength_m < 0) sideWallLength_m = 0; 
+            let frontWallLength_m = houseL_m;
+            
+            const areaWallFrontBack = 2 * (frontWallLength_m * houseH_m);
+            const areaWallSides = 2 * (sideWallLength_m * houseH_m);
+            const totalWallArea_m2 = areaWallFrontBack + areaWallSides;
+
+            if (totalWallArea_m2 <=0) return 0;
+
+            // Bricks per m2 of facade area for a single layer (half-brick thickness, stretcher bond)
+            const bricksPerSqM_FaceLayer = 1 / ((brickL_m + mortar_m) * (brickH_m + mortar_m));
+
+            let numLayers; // Effective number of brick layers (stretcher face equivalent)
+            switch (params.wallType) {
+                case 'HalfBrick': numLayers = 1; break; // Uses brickW for thickness, but calculation often based on L*H face
+                case 'OneBrick': numLayers = 2; break;  // Effectively two "half-brick" layers side-by-side in thickness
+                case 'OnePointFiveBrick': numLayers = 3; break;
+                case 'TwoBrick': numLayers = 4; break;
+                default: numLayers = 1;
+            }
+            // This calculation is a common simplification and might not perfectly match the visual count
+            // especially with complex bonds or if we were to count headers/stretchers differently.
+            // For 'HalfBrick', if it's truly just one layer of W-thick bricks, then the 'numLayers' for surface area calc should be 1.
+            // The current `bricksPerSqM_FaceLayer` assumes bricks are laid with their L face outwards.
+            // If HalfBrick means W face outward, the formula for `bricksPerSqM_FaceLayer` would use brickW_m instead of brickL_m.
+            // Let's stick to the provided logic first.
+             let bricksPerSqM_SelectedType;
+             switch (params.wallType) {
+                case 'HalfBrick': 
+                    // If wall is brickW thick, and bricks are laid stretcher course (L face visible)
+                    // then the area coverage is based on L*H.
+                    // The "thickness" is W. The number of bricks per m2 of wall face is still based on L and H.
+                    bricksPerSqM_SelectedType = bricksPerSqM_FaceLayer;
+                    break;
+                case 'OneBrick': 
+                     // One brick thick (L), usually alternating headers and stretchers.
+                     // A common estimate is double of half-brick by area.
+                    bricksPerSqM_SelectedType = bricksPerSqM_FaceLayer * 2; 
+                    break;
+                case 'OnePointFiveBrick': 
+                    bricksPerSqM_SelectedType = bricksPerSqM_FaceLayer * 3;
+                    break;
+                case 'TwoBrick': 
+                    bricksPerSqM_SelectedType = bricksPerSqM_FaceLayer * 4;
+                    break;
+                default:
+                    bricksPerSqM_SelectedType = bricksPerSqM_FaceLayer;
+            }
+            return Math.ceil(totalWallArea_m2 * bricksPerSqM_SelectedType);
+        }
+
+        function buildWallVisual(wallLength, wallHeight, params, actualWallThickness, wallGroup) {
+            const { brickL, brickW, brickH, mortar } = params;
+            const currentEffBrickH = brickH + mortar;
+            const numRows = Math.ceil(wallHeight / currentEffBrickH);
+
+            for (let r = 0; r < numRows; r++) {
+                const rowBaseY = (r * currentEffBrickH) - (wallHeight / 2) + (brickH / 2); // Center wall at Y=0
+                if (rowBaseY - brickH/2 + currentEffBrickH <= -wallHeight/2 && r > 0) continue; // Optimization: don't draw rows fully below ground if wallHeight is centered
+                if (rowBaseY + brickH/2 - currentEffBrickH >= wallHeight/2 && r < numRows -1) continue; // Optimization for rows fully above top
+
+
+                const isOddRow = r % 2 !== 0;
+                let currentX_wall_start = -wallLength / 2;
+
+                // Helper to create and add brick
+                function addBrickToWall(len, h, depth, x_center, y_center, z_offset) {
+                    const brickMesh = createBrickInstance(len, h, depth);
+                    if (brickMesh) {
+                        brickMesh.position.set(x_center, y_center, z_offset);
+                        wallGroup.add(brickMesh);
+                    }
+                }
+                
+                let x; // current position marker
+
+                switch (params.wallType) {
+                    case 'HalfBrick': { // Thickness: brickW. Face: Stretchers.
+                        const effBrickL_S = brickL + mortar;
+                        x = currentX_wall_start;
+                        if (isOddRow) {
+                            const halfBatLen = brickL / 2 - mortar / 2;
+                            if (wallLength > effBrickL_S && halfBatLen >= MIN_BRICK_PART_VISUAL_LENGTH) {
+                                addBrickToWall(halfBatLen, brickH, brickW, x + halfBatLen / 2, rowBaseY, 0);
+                                x += halfBatLen + mortar;
+                            } else if (wallLength > effBrickL_S) { // If too short for bat, but long enough for offset start
+                                x += effBrickL_S / 2; //  Conceptual offset
+                            }
+                        }
+                        while (x < wallLength / 2 - mortar / 2 - MIN_BRICK_PART_VISUAL_LENGTH/2) { // Adjusted condition slightly
+                            let currentFaceLength = brickL;
+                            if (x + brickL > wallLength / 2 - mortar / 2) {
+                                currentFaceLength = (wallLength / 2) - x;
+                                if (currentFaceLength < MIN_BRICK_PART_VISUAL_LENGTH) break;
+                            }
+                            addBrickToWall(currentFaceLength, brickH, brickW, x + currentFaceLength / 2, rowBaseY, 0);
+                            if (currentFaceLength < brickL) break;
+                            x += currentFaceLength + mortar;
+                        }
+                        break;
+                    }
+                    case 'OneBrick': { // Thickness: brickL. Alternating Stretcher/Header face.
+                        if (isOddRow) { // STRETCHERS ON FACE (brickL face, brickL depth)
+                            const effBrickL_S = brickL + mortar;
+                            x = currentX_wall_start;
+                            const halfBatLen = brickL / 2 - mortar / 2;
+                             if (wallLength > effBrickL_S && halfBatLen >= MIN_BRICK_PART_VISUAL_LENGTH) {
+                                addBrickToWall(halfBatLen, brickH, brickL, x + halfBatLen / 2, rowBaseY, 0);
+                                x += halfBatLen + mortar;
+                            } else if (wallLength > effBrickL_S) {
+                                 x += effBrickL_S / 2;
+                            }
+                            while (x < wallLength / 2 - mortar / 2 - MIN_BRICK_PART_VISUAL_LENGTH/2) {
+                                let len = brickL; if (x + brickL > wallLength/2 - mortar/2) { len = (wallLength/2)-x; if(len<MIN_BRICK_PART_VISUAL_LENGTH)break;}
+                                addBrickToWall(len, brickH, brickL, x + len/2, rowBaseY, 0);
+                                if (len < brickL) break; x += len + mortar;
+                            }
+                        } else { // HEADERS ON FACE (brickW face, brickL depth)
+                            const effBrickW_H = brickW + mortar;
+                            x = currentX_wall_start;
+                            while (x < wallLength / 2 - mortar / 2 - MIN_BRICK_PART_VISUAL_LENGTH/2) {
+                                let len = brickW; if (x + brickW > wallLength/2 - mortar/2) { len = (wallLength/2)-x; if(len<MIN_BRICK_PART_VISUAL_LENGTH)break;}
+                                addBrickToWall(len, brickH, brickL, x + len/2, rowBaseY, 0);
+                                if (len < brickW) break; x += len + mortar;
+                            }
+                        }
+                        break;
+                    }
+                    case 'OnePointFiveBrick': { // Thickness: L+m+W
+                        const z_outer_layer_center = (brickW) / 2; // Outer layer (W depth) centered at +W/2 relative to its own center line
+                        const z_inner_layer_center = -(brickL) / 2; // Inner layer (L depth) centered at -L/2 relative to its own center line
+                        // These Z are relative to the centerline of EACH LAYER. The whole wall assembly then needs to be centered.
+                        // The actual Z positions relative to wall centerline:
+                        const z_pos_outer = actualWallThickness/2 - brickW/2; // outer layer's center (W-thick layer is outside)
+                        const z_pos_inner = -(actualWallThickness/2 - brickL/2); // inner layer's center (L-thick layer is inside)
+
+
+                        if (isOddRow) { // Outer Header (W face, L depth at outer), Inner Stretcher (L face, W depth at inner)
+                            // Outer Headers
+                            const effBrickW_H = brickW + mortar; x = currentX_wall_start;
+                            const halfBatWLen = brickW / 2 - mortar / 2;
+                            if (wallLength > effBrickW_H && halfBatWLen >= MIN_BRICK_PART_VISUAL_LENGTH) {
+                                addBrickToWall(halfBatWLen, brickH, brickL, x + halfBatWLen / 2, rowBaseY, z_pos_outer); // Depth L
+                                x += halfBatWLen + mortar;
+                            } else if (wallLength > effBrickW_H) { x += effBrickW_H / 2; }
+                            while (x < wallLength / 2 - mortar/2 - MIN_BRICK_PART_VISUAL_LENGTH/2) {
+                                let len = brickW; if (x + brickW > wallLength/2-mortar/2) { len = (wallLength/2)-x; if(len<MIN_BRICK_PART_VISUAL_LENGTH)break;}
+                                addBrickToWall(len, brickH, brickL, x + len/2, rowBaseY, z_pos_outer); // Depth L
+                                if(len<brickW)break; x += len + mortar;
+                            }
+                            // Inner Stretchers
+                            const effBrickL_S = brickL + mortar; x = currentX_wall_start;
+                            while (x < wallLength / 2 - mortar/2 - MIN_BRICK_PART_VISUAL_LENGTH/2) {
+                                let len = brickL; if (x + brickL > wallLength/2-mortar/2) { len = (wallLength/2)-x; if(len<MIN_BRICK_PART_VISUAL_LENGTH)break;}
+                                addBrickToWall(len, brickH, brickW, x + len/2, rowBaseY, z_pos_inner); // Depth W
+                                if(len<brickL)break; x += len + mortar;
+                            }
+                        } else { // Outer Stretcher (L face, W depth at outer), Inner Header (W face, L depth at inner)
+                            // Outer Stretchers
+                            const effBrickL_S = brickL + mortar; x = currentX_wall_start;
+                            while (x < wallLength / 2 - mortar/2 - MIN_BRICK_PART_VISUAL_LENGTH/2) {
+                                let len = brickL; if (x + brickL > wallLength/2-mortar/2) { len = (wallLength/2)-x; if(len<MIN_BRICK_PART_VISUAL_LENGTH)break;}
+                                addBrickToWall(len, brickH, brickW, x + len/2, rowBaseY, z_pos_outer); // Depth W
+                                if(len<brickL)break; x += len + mortar;
+                            }
+                            // Inner Headers
+                            const effBrickW_H = brickW + mortar; x = currentX_wall_start;
+                            const halfBatWLen = brickW / 2 - mortar / 2;
+                            if (wallLength > effBrickW_H && halfBatWLen >= MIN_BRICK_PART_VISUAL_LENGTH) {
+                                addBrickToWall(halfBatWLen, brickH, brickL, x + halfBatWLen / 2, rowBaseY, z_pos_inner); // Depth L
+                                x += halfBatWLen + mortar;
+                            } else if (wallLength > effBrickW_H) { x += effBrickW_H / 2; }
+                            while (x < wallLength / 2 - mortar/2 - MIN_BRICK_PART_VISUAL_LENGTH/2) {
+                                let len = brickW; if (x + brickW > wallLength/2-mortar/2) { len = (wallLength/2)-x; if(len<MIN_BRICK_PART_VISUAL_LENGTH)break;}
+                                addBrickToWall(len, brickH, brickL, x + len/2, rowBaseY, z_pos_inner); // Depth L
+                                if(len<brickW)break; x += len + mortar;
+                            }
+                        }
+                        break;
+                    }
+                    case 'TwoBrick': { // Thickness: L+m+L. Two layers of L-depth stretchers.
+                        const z_layer_offset = (brickL + mortar) / 2; // Offset for each L-deep layer from centerline of the L+m+L wall
+                        const effBrickL_S = brickL + mortar;
+                        x = currentX_wall_start;
+                        if (isOddRow) {
+                            const halfBatLen = brickL / 2 - mortar / 2;
+                            if (wallLength > effBrickL_S && halfBatLen >= MIN_BRICK_PART_VISUAL_LENGTH) {
+                                addBrickToWall(halfBatLen, brickH, brickL, x + halfBatLen/2, rowBaseY, z_layer_offset);
+                                addBrickToWall(halfBatLen, brickH, brickL, x + halfBatLen/2, rowBaseY, -z_layer_offset);
+                                x += halfBatLen + mortar;
+                            } else if (wallLength > effBrickL_S) { x += effBrickL_S / 2; }
+                        }
+                        while (x < wallLength / 2 - mortar / 2 - MIN_BRICK_PART_VISUAL_LENGTH/2) {
+                            let len = brickL; if (x + brickL > wallLength/2-mortar/2) { len = (wallLength/2)-x; if(len<MIN_BRICK_PART_VISUAL_LENGTH)break;}
+                            addBrickToWall(len, brickH, brickL, x+len/2, rowBaseY, z_layer_offset);
+                            addBrickToWall(len, brickH, brickL, x+len/2, rowBaseY, -z_layer_offset);
+                            if (len < brickL) break; x += len + mortar;
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+
+
+        function visualizeAndCalculate() {
+            loadingIndicator.style.display = 'flex'; // Use flex for spinner centering
+            requestAnimationFrame(() => { // Ensure UI update before heavy calculation
+                _visualizeAndCalculate();
+                loadingIndicator.style.display = 'none';
+            });
+        }
+        
+        function _visualizeAndCalculate() {
+            clearScene();
+            const params = getInputValues();
+            if (!params) {
+                document.getElementById('brickCount').textContent = 'Ошибка ввода';
+                document.getElementById('wallThicknessResult').textContent = 'Ошибка';
+                if (window.groundMesh) window.groundMesh.position.y = -10; // Default if params fail
+                return;
+            }
+            
+            // Update ground position based on brick height and mortar
+            if (window.groundMesh) {
+                 window.groundMesh.position.y = -params.houseH / 2 - params.mortar; // Place ground just below the base of the centered house walls
+            }
+
+
+            const actualWallThickness = getActualWallThickness(params);
+            document.getElementById('wallThicknessResult').textContent = actualWallThickness.toFixed(0);
+            
+            const totalBricksCount = calculateTotalBricks(params, actualWallThickness);
+            document.getElementById('brickCount').textContent = totalBricksCount;
+
+            const wallYPosition = 0; // Walls will be built around Y=0
+
+            // Front Wall
+            const wallFrontGroup = new THREE.Group();
+            buildWallVisual(params.houseL, params.houseH, params, actualWallThickness, wallFrontGroup);
+            wallFrontGroup.position.set(0, wallYPosition, params.houseW / 2 - actualWallThickness / 2);
+            bricksGroup.add(wallFrontGroup);
+
+            // Back Wall
+            const wallBackGroup = new THREE.Group();
+            buildWallVisual(params.houseL, params.houseH, params, actualWallThickness, wallBackGroup);
+            wallBackGroup.position.set(0, wallYPosition, -(params.houseW / 2 - actualWallThickness / 2));
+            wallBackGroup.rotation.y = Math.PI; 
+            bricksGroup.add(wallBackGroup);
+            
+            let sideWallEffectiveLength = params.houseW - 2 * actualWallThickness; 
+             if (sideWallEffectiveLength < MIN_BRICK_PART_VISUAL_LENGTH + params.mortar) {
+                 sideWallEffectiveLength = 0; // Too short to display meaningfully
+            }
+
+            if (sideWallEffectiveLength > 0) {
+                // Left Wall
+                const wallLeftGroup = new THREE.Group();
+                buildWallVisual(sideWallEffectiveLength, params.houseH, params, actualWallThickness, wallLeftGroup);
+                wallLeftGroup.position.set(-(params.houseL / 2 - actualWallThickness / 2), wallYPosition, 0);
+                wallLeftGroup.rotation.y = -Math.PI / 2;
+                bricksGroup.add(wallLeftGroup);
+
+                // Right Wall
+                const wallRightGroup = new THREE.Group();
+                buildWallVisual(sideWallEffectiveLength, params.houseH, params, actualWallThickness, wallRightGroup);
+                wallRightGroup.position.set(params.houseL / 2 - actualWallThickness / 2, wallYPosition, 0);
+                wallRightGroup.rotation.y = Math.PI / 2;
+                bricksGroup.add(wallRightGroup);
+            }
+            
+            // Adjust camera
+            const houseDiagonal = Math.sqrt(params.houseL**2 + params.houseW**2 + params.houseH**2);
+            controls.target.set(0, wallYPosition + params.houseH * 0.1, 0); // Target slightly above ground center
+
+            let camDistance = Math.max(params.houseL, params.houseW, params.houseH) * 1.8; // Base distance factor
+            camDistance = Math.max(camDistance, houseDiagonal * 1.3); 
+            camDistance = Math.max(camDistance, 2500); // Min overall distance
+
+            camera.position.set(
+                camDistance * 0.6, 
+                wallYPosition + params.houseH * 0.4 + camDistance * 0.3, 
+                camDistance * 0.7
+            );
+            
+            if (camera.position.length() < controls.minDistance * 1.2) {
+                 camera.position.normalize().multiplyScalar(controls.minDistance * 1.2);
+            }
+            controls.update();
+        }
+
+        document.getElementById('visualizeButton').addEventListener('click', visualizeAndCalculate);
+        
+        // Initial call with default values after DOM is ready
+        // Need to ensure params object exists for groundMesh initial positioning
+        const initialParams = { brickH: 65, mortar: 10, houseH: 3000 }; // Default or read from inputs
+        window.params = initialParams; // Make accessible for init if needed
+
+        init();
+        visualizeAndCalculate(); 
+    </script>
+</body>
+</html>
