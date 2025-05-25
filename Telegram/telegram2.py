@@ -17,6 +17,8 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QObject, QSettings, QDate
 from PyQt6.QtGui import QPalette, QColor
 
+import database_handler # For SQLite operations
+
 from telethon import TelegramClient, events
 from telethon.tl.types import MessageMediaPhoto
 from telethon.errors import (
@@ -385,9 +387,26 @@ class DownloaderWorker(QObject):
                                 'Image Number': message_image_count,
                                 'Message Group': message_group_counter,
                                 'Original Filename': original_filename if original_filename else "N/A",
-                                'UTC Date': message.date.strftime("%Y-%m-%d %H:%M:%S"),
+                                'UTC Date': message.date.strftime("%Y-%m-%d %H:%M:%S"), # Original message UTC date
                             }
-                            self.image_data.append(image_info)
+                            self.image_data.append(image_info) # For Excel
+
+                            # Prepare data for SQLite
+                            db_metadata = {
+                                'message_id': image_info['Message ID'],
+                                'channel': image_info['Channel'],
+                                'image_number_in_message': image_info['Image Number'],
+                                'caption': image_info['Caption'], # This is already processed for exclusions
+                                'filename': image_info['Filename'],
+                                'full_path': image_info['Full Path'],
+                                'download_date': image_info['Date'], # Local date
+                                'download_time': image_info['Time'], # Local time
+                                'original_filename': image_info['Original Filename'],
+                                'utc_timestamp': datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"), # DB record creation timestamp
+                                'message_group': image_info['Message Group'],
+                                'telegram_message_date': image_info['UTC Date'] # Original message UTC timestamp
+                            }
+                            database_handler.insert_image_metadata(db_metadata)
                             
                     except Exception as download_err:
                         self.status_updated.emit(f"Skipped download due to error: {download_err}")
@@ -525,12 +544,22 @@ class MainWindow(QMainWindow):
         self.downloader_worker = None
 
         self.init_ui()
-        self.load_settings()
+        self.load_settings() # Loads from QSettings and config.ini
+        
+        # Initialize database
+        try:
+            database_handler.initialize_database()
+            self.status_label.setText("Database initialized.")
+        except Exception as e:
+            self.show_error("Database Error", f"Could not initialize database: {e}")
+            # Application can still run, but DB features won't work.
+            
         self.update_button_states()
         self.apply_stylesheet() # Apply custom styling
         
         # Show welcome/help message if first run or missing API credentials
         self.show_welcome_message()
+
 
     def init_ui(self):
         main_widget = QWidget()
