@@ -1042,8 +1042,8 @@ class MainWindow(QMainWindow):
         self.ai_categorization_checkbox.setEnabled(not is_running)
         self.categories_file_button.setEnabled(not is_running)
         
-        # Viewer button should always be enabled unless a download is running (or based on other logic if needed)
-        self.viewer_button.setEnabled(not is_running) 
+        # Viewer button should always be enabled.
+        self.viewer_button.setEnabled(True)
 
 
     def select_folder(self):

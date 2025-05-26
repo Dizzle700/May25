@@ -27,7 +27,8 @@ def load_categories(categories_file_path=DEFAULT_CATEGORIES_FILE):
         with open(categories_file_path, 'r', encoding='utf-8') as f:
             for line in f:
                 line = line.strip()
-                if line and not line.startswith('#'): # Ignore empty lines and comments
+                if line and not line.startswith('#') and \
+                   not (line.startswith("'") or line.startswith('"')):
                     categories.append(line)
     except FileNotFoundError:
         print(f"Warning: Categories file not found at {categories_file_path}. Returning empty list.")
