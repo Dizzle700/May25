@@ -75,6 +75,40 @@ def sanitize_filename(filename, exclusion_patterns=None):
         return "downloaded_image"
     return sanitized
 
+def sanitize_caption_text(text):
+    """
+    Cleans caption text by removing emojis, normalizing whitespace,
+    and removing leading/trailing whitespace.
+    """
+    if not text:
+        return ""
+
+    # Remove common emojis - this is a basic range, more comprehensive solutions exist
+    # Basic Emoji ranges (includes some symbols, pictographs, transport, regional indicators)
+    emoji_pattern = re.compile(
+        "["
+        "\U0001F600-\U0001F64F"  # emoticons
+        "\U0001F300-\U0001F5FF"  # symbols & pictographs
+        "\U0001F680-\U0001F6FF"  # transport & map symbols
+        "\U0001F700-\U0001F77F"  # alchemical symbols
+        "\U0001F780-\U0001F7FF"  # Geometric Shapes Extended
+        "\U0001F800-\U0001F8FF"  # Supplemental Arrows-C
+        "\U0001F900-\U0001F9FF"  # Supplemental Symbols and Pictographs
+        "\U0001FA00-\U0001FA6F"  # Chess Symbols
+        "\U0001FA70-\U0001FAFF"  # Symbols and Pictographs Extended-A
+        "\U00002702-\U000027B0"  # Dingbats
+        "\U000024C2-\U0001F251" 
+        "]+", flags=re.UNICODE)
+    text = emoji_pattern.sub('', text)
+
+    # Normalize whitespace (multiple spaces/tabs/newlines to a single space)
+    text = re.sub(r'\s+', ' ', text)
+    
+    # Remove leading/trailing whitespace
+    text = text.strip()
+    
+    return text
+
 # --- Downloader Logic (Worker) ---
 class AuthCodeDialog(QDialog):
     def __init__(self, parent=None):
@@ -431,12 +465,16 @@ class DownloaderWorker(QObject):
                                 'utc_timestamp': datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"), # DB record creation timestamp
                                 'message_group': image_info['Message Group'],
                                 'telegram_message_date': image_info['UTC Date'], # Original message UTC timestamp
-                                'ai_category': "не применимо" # Default if AI not used or fails
+                                'ai_category': "не применимо", # Default if AI not used or fails
+                                'sanitized_caption': sanitize_caption_text(caption_raw) # Add sanitized caption
                             }
 
                             if can_categorize_ai:
-                                caption_for_ai = image_info['Caption'] # Use the already processed caption
-                                if caption_for_ai and caption_for_ai.lower() != "no_caption":
+                                # Use the sanitized caption (without exclusions) for AI, 
+                                # as exclusions might remove keywords important for categorization.
+                                # The 'excel_caption' (image_info['Caption']) has exclusions applied.
+                                caption_for_ai = db_metadata['sanitized_caption'] 
+                                if caption_for_ai and caption_for_ai.lower() != "no_caption": # no_caption is a placeholder
                                     self.status_updated.emit(f"Categorizing: {filename_sanitized}...")
                                     ai_suggested_category = gemini_categorizer.get_category_from_gemini(
                                         caption_for_ai, 
@@ -446,7 +484,7 @@ class DownloaderWorker(QObject):
                                     db_metadata['ai_category'] = ai_suggested_category
                                     self.status_updated.emit(f"AI Category for {filename_sanitized}: {ai_suggested_category}")
                                 else:
-                                    db_metadata['ai_category'] = "нет описания" 
+                                    db_metadata['ai_category'] = "нет описания для AI" # More specific
                             
                             database_handler.insert_image_metadata(db_metadata)
                             
