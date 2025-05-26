@@ -329,7 +329,14 @@ class DownloaderWorker(QObject):
             start_datetime_local = datetime.combine(start_qdate.toPyDate(), datetime.min.time(), tzinfo=local_tz)
             start_datetime_utc = start_datetime_local.astimezone(timezone.utc)
 
-            self.status_updated.emit(f"Filtering images from: {start_qdate.toString(Qt.DateFormat.ISODate)}")
+            # End Date Handling
+            end_qdate = self.settings_dict.get('end_date', QDate.currentDate()) # Default to today if not found
+            # To include the entire end_qdate, we filter messages strictly older than the start of the next day.
+            end_qdate_next_day = end_qdate.addDays(1)
+            end_datetime_local_exclusive = datetime.combine(end_qdate_next_day.toPyDate(), datetime.min.time(), tzinfo=local_tz)
+            end_datetime_utc_exclusive = end_datetime_local_exclusive.astimezone(timezone.utc)
+            
+            self.status_updated.emit(f"Filtering images from: {start_qdate.toString(Qt.DateFormat.ISODate)} until {end_qdate.toString(Qt.DateFormat.ISODate)}")
 
             # Clear image data list before starting download
             self.image_data = []
@@ -359,9 +366,16 @@ class DownloaderWorker(QObject):
                 if self._stop_requested: break # Check again after pause loop
 
                 # Date Filtering (compare timezone-aware datetimes)
+                # Messages are iterated newest to oldest.
+
+                # Skip messages newer than the end date (exclusive of the day after end_date)
+                if message.date >= end_datetime_utc_exclusive:
+                    continue 
+
+                # Stop if message date is older than the start date filter
                 if message.date < start_datetime_utc:
                     self.status_updated.emit("Reached start date. Stopping iteration.")
-                    break # Stop if message date is older than filter date
+                    break 
 
                 # Check if we're on a new message
                 if current_message_id != message.id:
@@ -485,11 +499,13 @@ class DownloaderWorker(QObject):
                                 # as exclusions might remove keywords important for categorization.
                                 # The 'excel_caption' (image_info['Caption']) has exclusions applied.
                                 caption_for_ai = db_metadata['sanitized_caption'] 
-                                if caption_for_ai and caption_for_ai.lower() != "no_caption": # no_caption is a placeholder
-                                    self.status_updated.emit(f"Categorizing: {filename_sanitized}...")
+                                if caption_for_ai and caption_for_ai.lower() != "no_caption": # no_caption is a placeholder, or use a length check
+                                    self.status_updated.emit(f"Categorizing with AI: {filename_sanitized}...")
+                                    # Pass image path (full_path) and caption_for_ai
                                     ai_suggested_category = gemini_categorizer.get_category_from_gemini(
-                                        caption_for_ai, 
-                                        categories_list, 
+                                        full_path, # Pass the image path
+                                        caption_for_ai,
+                                        categories_list,
                                         gemini_api_key
                                     )
                                     db_metadata['ai_category'] = ai_suggested_category
@@ -702,12 +718,26 @@ class MainWindow(QMainWindow):
 
         # --- Date Filter and Options ---
         options_layout = QHBoxLayout()
-        date_label = QLabel("Download images from:")
-        self.date_edit = QDateEdit()
-        self.date_edit.setCalendarPopup(True)
-        self.date_edit.setDisplayFormat("yyyy-MM-dd")
-        self.date_edit.setDate(QDate.currentDate().addMonths(-1)) # Default to 1 month ago
         
+        date_label_start = QLabel("Download from:")
+        self.date_edit_start = QDateEdit()
+        self.date_edit_start.setCalendarPopup(True)
+        self.date_edit_start.setDisplayFormat("yyyy-MM-dd")
+        self.date_edit_start.setDate(QDate.currentDate().addMonths(-1)) # Default to 1 month ago
+        
+        date_label_end = QLabel("Download until:")
+        self.date_edit_end = QDateEdit()
+        self.date_edit_end.setCalendarPopup(True)
+        self.date_edit_end.setDisplayFormat("yyyy-MM-dd")
+        self.date_edit_end.setDate(QDate.currentDate()) # Default to today
+        
+        options_layout.addWidget(date_label_start)
+        options_layout.addWidget(self.date_edit_start)
+        options_layout.addSpacing(10)
+        options_layout.addWidget(date_label_end)
+        options_layout.addWidget(self.date_edit_end)
+        options_layout.addSpacing(20)
+
         # Add Excel export option
         self.export_excel_checkbox = QCheckBox("Export data to Excel")
         self.export_excel_checkbox.setToolTip("When checked, image metadata will be exported to Excel")
@@ -721,12 +751,12 @@ class MainWindow(QMainWindow):
         self.exclusion_button.setToolTip("Set patterns to exclude from filenames and Excel")
         self.exclusion_button.clicked.connect(self.open_exclusion_dialog)
         
-        options_layout.addWidget(date_label)
-        options_layout.addWidget(self.date_edit)
+        # options_layout.addWidget(date_label) # Combined above
+        # options_layout.addWidget(self.date_edit) # Combined above
         options_layout.addWidget(self.export_excel_checkbox)
         options_layout.addWidget(self.preserve_names_checkbox)
         options_layout.addWidget(self.exclusion_button)
-        # options_layout.addStretch() # Remove stretch here to add more AI options below
+        options_layout.addStretch() # Add stretch after all main date/file options
         layout.addLayout(options_layout)
 
         # --- AI Categorization Options ---
@@ -821,7 +851,8 @@ class MainWindow(QMainWindow):
             'phone': self.phone_entry.text().strip(),
             'channel': self.channel_entry.text().strip(),
             'save_folder': self.settings.value("downloader/save_folder", ""), 
-            'start_date': self.date_edit.date(),
+            'start_date': self.date_edit_start.date(),
+            'end_date': self.date_edit_end.date(),
             'export_excel': self.export_excel_checkbox.isChecked(),
             'preserve_names': self.preserve_names_checkbox.isChecked(),
             'exclusion_patterns': self.settings.value("downloader/exclusion_patterns_list", [], type=list),
@@ -973,7 +1004,8 @@ class MainWindow(QMainWindow):
         self.phone_entry.setEnabled(not is_running)
         self.channel_entry.setEnabled(not is_running)
         self.folder_button.setEnabled(not is_running)
-        self.date_edit.setEnabled(not is_running)
+        self.date_edit_start.setEnabled(not is_running)
+        self.date_edit_end.setEnabled(not is_running)
         self.export_excel_checkbox.setEnabled(not is_running)
         self.preserve_names_checkbox.setEnabled(not is_running)
 
@@ -1032,13 +1064,21 @@ class MainWindow(QMainWindow):
                 self.settings.remove("downloader/save_folder")
 
 
-        date_str = self.settings.value("downloader/start_date", "")
-        if date_str:
-            saved_date = QDate.fromString(date_str, Qt.DateFormat.ISODate)
-            if saved_date.isValid():
-                self.date_edit.setDate(saved_date)
+        date_str_start = self.settings.value("downloader/start_date", "")
+        if date_str_start:
+            saved_date_start = QDate.fromString(date_str_start, Qt.DateFormat.ISODate)
+            if saved_date_start.isValid():
+                self.date_edit_start.setDate(saved_date_start)
         # Else keep the default (1 month ago from init_ui)
-        
+
+        date_str_end = self.settings.value("downloader/end_date", "")
+        if date_str_end:
+            saved_date_end = QDate.fromString(date_str_end, Qt.DateFormat.ISODate)
+            if saved_date_end.isValid():
+                self.date_edit_end.setDate(saved_date_end)
+        else: # Default to current date if not set
+            self.date_edit_end.setDate(QDate.currentDate())
+
         export_excel = self.settings.value("downloader/export_excel", False, type=bool)
         self.export_excel_checkbox.setChecked(export_excel)
 
@@ -1122,7 +1162,8 @@ class MainWindow(QMainWindow):
 
         # --- Save to QSettings (GUI specific settings) ---
         # save_folder is saved directly in select_folder
-        self.settings.setValue("downloader/start_date", self.date_edit.date().toString(Qt.DateFormat.ISODate))
+        self.settings.setValue("downloader/start_date", self.date_edit_start.date().toString(Qt.DateFormat.ISODate))
+        self.settings.setValue("downloader/end_date", self.date_edit_end.date().toString(Qt.DateFormat.ISODate))
         self.settings.setValue("downloader/export_excel", self.export_excel_checkbox.isChecked())
         self.settings.setValue("downloader/preserve_names", self.preserve_names_checkbox.isChecked())
         # exclusion_patterns_list is saved in open_exclusion_dialog

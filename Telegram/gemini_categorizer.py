@@ -1,6 +1,7 @@
 import configparser
 import os
 import google.generativeai as genai
+from PIL import Image # For image processing
 
 # --- Configuration ---
 CONFIG_FILE_PATH = os.path.join(os.path.dirname(__file__), "config.ini")
@@ -38,60 +39,77 @@ def load_categories(categories_file_path=DEFAULT_CATEGORIES_FILE):
         print(f"Warning: No categories loaded from {categories_file_path}. Ensure the file is not empty and has valid entries.")
     return categories
 
-def get_category_from_gemini(text_to_categorize, categories_list, api_key):
+def get_category_from_gemini(image_path, text_to_categorize, categories_list, api_key):
     """
-    Uses Gemini AI to categorize the given text based on the provided categories list.
+    Uses Gemini AI to categorize the given image and text based on the provided categories list.
 
     Args:
+        image_path (str): Path to the image file.
         text_to_categorize (str): The text (e.g., product caption) to categorize.
         categories_list (list): A list of category strings.
         api_key (str): The Gemini API key.
 
     Returns:
-        str: The suggested category name from the list, or 'не определена' if no suitable category is found or an error occurs.
+        str: The suggested category name from the list, or 'не определена' / error message.
     """
     if not api_key or api_key == "YOUR_GEMINI_API_KEY":
-        # print("Gemini API key is missing or is a placeholder. Skipping AI categorization.")
-        return "не настроен API ключ" # More specific than 'не определена'
+        return "не настроен API ключ"
 
     if not categories_list:
-        # print("Categories list is empty. Skipping AI categorization.")
         return "нет списка категорий"
 
-    if not text_to_categorize or len(text_to_categorize.strip()) < 5: # Basic check for meaningful text
-        # print("Text to categorize is too short or empty. Skipping AI categorization.")
-        return "слишком короткий текст"
+    if not image_path or not os.path.exists(image_path):
+        print(f"Warning: Image path invalid or file does not exist: {image_path}. Attempting text-only categorization.")
+        # Fallback to text-only if image is missing, or return specific error
+        # For now, let's make image mandatory for this function version
+        return "файл изображения не найден"
+
+
+    # Text is optional but helpful if present
+    # if not text_to_categorize or len(text_to_categorize.strip()) < 3:
+    #     text_to_categorize = "Проанализируй только изображение."
+
 
     try:
         genai.configure(api_key=api_key)
         
-        # Model configuration - using gemini-1.5-flash-latest
+        img = Image.open(image_path)
+
+        # Using gemini-1.5-pro-latest for multimodal capabilities
+        # Note: Ensure the user's API key has access to this model.
+        # gemini-pro-vision was the older model name for vision.
+        # gemini-1.5-flash-latest is text only.
+        # gemini-1.5-pro-latest is the current advanced multimodal model.
+        model_name_to_use = "gemini-1.5-pro-latest" 
+        
         generation_config = {
-            "temperature": 0.1, # Lower temperature for more deterministic category selection
+            "temperature": 0.2, 
             "top_p": 1,
-            "top_k": 1,
-            "max_output_tokens": 50, # Category name should be short
+            "top_k": 32, # Allow for a bit more flexibility with multimodal
+            "max_output_tokens": 50,
         }
-        safety_settings = [ # Adjust safety settings as needed
+        safety_settings = [
             {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
             {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
             {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
             {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
         ]
-        model = genai.GenerativeModel(model_name="gemini-1.5-flash-latest",
+        model = genai.GenerativeModel(model_name=model_name_to_use,
                                       generation_config=generation_config,
                                       safety_settings=safety_settings)
 
         categories_str = ", ".join(categories_list)
-        prompt_parts = [
-            f"Проанализируй следующий текст о товаре: \"{text_to_categorize}\". ",
-            f"К какой из следующих категорий он лучше всего подходит? Категории: [{categories_str}]. ",
-            "Ответь только названием одной категории из предоставленного списка. ",
-            "Если ни одна категория точно не подходит или текст не описывает товар, ответь 'не определена'."
-        ]
         
-        # print(f"DEBUG: Gemini Prompt: {''.join(prompt_parts)}") # For debugging
-        response = model.generate_content(prompt_parts)
+        prompt_text = (
+            f"Проанализируй это изображение и следующий текст (если есть): \"{text_to_categorize if text_to_categorize else 'Нет дополнительного текста.'}\". "
+            f"К какой из следующих категорий товар на изображении лучше всего подходит? Категории: [{categories_str}]. "
+            "Ответь только названием одной категории из предоставленного списка. "
+            "Если ни одна категория точно не подходит или на изображении нет явного товара, ответь 'не определена'."
+        )
+        
+        # print(f"DEBUG: Gemini Prompt Text: {prompt_text}")
+        # The SDK expects a list of parts for multimodal input
+        response = model.generate_content([prompt_text, img])
         
         if response.parts:
             suggested_category_raw = response.text.strip()
@@ -157,20 +175,22 @@ if __name__ == '__main__':
             # Test categorization
             sample_text_headphone = "Беспроводные наушники Awei T29 Pro с шумоподавлением, Bluetooth 5.1, отличное звучание"
             sample_text_charger = "Быстрое зарядное устройство USB-C PD 20W для iPhone и Android"
-            sample_text_unknown = "Красивая ваза для цветов, ручная работа"
+            sample_text_headphone = "Беспроводные наушники Awei T29 Pro с шумоподавлением, Bluetooth 5.1, отличное звучание"
+            # For image-based test, you'd need a sample image path.
+            # This test will likely fail without a valid image path.
+            # For now, we'll assume a placeholder path for the test structure.
+            sample_image_path_placeholder = "path/to/sample_image.jpg" # User needs to replace this for local testing
+            print(f"Note: Standalone test requires a valid image at '{sample_image_path_placeholder}'")
 
-            print(f"\nTesting with: '{sample_text_headphone}'")
-            category = get_category_from_gemini(sample_text_headphone, cats, test_api_key)
-            print(f"Suggested Category: {category}")
 
-            print(f"\nTesting with: '{sample_text_charger}'")
-            category = get_category_from_gemini(sample_text_charger, cats, test_api_key)
-            print(f"Suggested Category: {category}")
-            
-            print(f"\nTesting with: '{sample_text_unknown}'")
-            category = get_category_from_gemini(sample_text_unknown, cats, test_api_key)
-            print(f"Suggested Category: {category}")
+            print(f"\nTesting with text: '{sample_text_headphone}' and image (placeholder): '{sample_image_path_placeholder}'")
+            if os.path.exists(sample_image_path_placeholder):
+                 category = get_category_from_gemini(sample_image_path_placeholder, sample_text_headphone, cats, test_api_key)
+                 print(f"Suggested Category: {category}")
+            else:
+                 print(f"Skipping image test as '{sample_image_path_placeholder}' does not exist.")
+
         else:
-            print("Skipping categorization test as no categories were loaded.")
+            print("Skipping categorization test as no categories were loaded or API key is placeholder.")
     else:
         print("Gemini API key not configured in telegram/config.ini or is a placeholder. Skipping live tests.")
