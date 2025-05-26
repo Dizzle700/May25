@@ -539,7 +539,12 @@ class DownloaderWorker(QObject):
                                 else:
                                     db_metadata['ai_category'] = "нет описания для AI" # More specific
                             
-                            database_handler.insert_image_metadata(db_metadata)
+                            # Pass the db_path to insert_image_metadata
+                            current_db_path = self.settings_dict.get('db_path')
+                            if current_db_path:
+                                database_handler.insert_image_metadata(db_metadata, current_db_path)
+                            else:
+                                self.status_updated.emit("Error: Database path not configured in worker. Skipping DB insert.")
                             
                     except Exception as download_err:
                         self.status_updated.emit(f"Skipped download due to error: {download_err}")
@@ -670,22 +675,25 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("Telegram Image Downloader")
         self.setGeometry(100, 100, 700, 550)  # Increased default size for better appearance
-        self.setMinimumSize(600, 450)  # Set minimum size
+        self.setMinimumSize(600, 480)  # Increased minimum height for new DB elements
 
         self.settings = QSettings(SETTINGS_ORGANIZATION, SETTINGS_APPNAME)
         self.downloader_thread = None
         self.downloader_worker = None
+        self.current_db_path = None # To store the currently selected/created DB path
 
         self.init_ui()
         self.load_settings() # Loads from QSettings and config.ini
         
-        # Initialize database
-        try:
-            database_handler.initialize_database()
-            self.status_label.setText("Database initialized.")
-        except Exception as e:
-            self.show_error("Database Error", f"Could not initialize database: {e}")
-            # Application can still run, but DB features won't work.
+        # Initialize database (this will now use the loaded or default DB path)
+        if self.current_db_path:
+            try:
+                database_handler.initialize_database(self.current_db_path)
+                self.status_label.setText(f"Database initialized: {os.path.basename(self.current_db_path)}")
+            except Exception as e:
+                self.show_error("Database Error", f"Could not initialize database '{self.current_db_path}': {e}")
+        else:
+            self.status_label.setText("No database selected. Please choose or create one.")
             
         self.update_button_states()
         self.apply_stylesheet() # Apply custom styling
@@ -741,6 +749,17 @@ class MainWindow(QMainWindow):
         folder_layout.addWidget(self.folder_button)
         folder_layout.addWidget(self.folder_label, 1) # Stretch label
         layout.addLayout(folder_layout)
+
+        # --- Database Selection ---
+        db_layout = QHBoxLayout()
+        self.db_button = QPushButton("Choose/Create Database (.sqlite)")
+        self.db_button.clicked.connect(self.select_database_file)
+        self.db_label = QLabel("No database selected.")
+        self.db_label.setWordWrap(True)
+        self.db_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        db_layout.addWidget(self.db_button)
+        db_layout.addWidget(self.db_label, 1)
+        layout.addLayout(db_layout)
 
         # --- Date Filter and Options ---
         options_layout = QHBoxLayout()
@@ -876,7 +895,8 @@ class MainWindow(QMainWindow):
             'api_hash': self.api_hash_entry.text().strip(),
             'phone': self.phone_entry.text().strip(),
             'channel': self.channel_entry.text().strip(),
-            'save_folder': self.settings.value("downloader/save_folder", ""), 
+            'save_folder': self.settings.value("downloader/save_folder", ""),
+            'db_path': self.current_db_path, # Add db_path to settings
             'start_date': self.date_edit_start.date(),
             'end_date': self.date_edit_end.date(),
             'export_excel': self.export_excel_checkbox.isChecked(),
@@ -905,6 +925,10 @@ class MainWindow(QMainWindow):
         # Field from QSettings (GUI selection)
         if not settings_to_validate.get('save_folder'):
             self.show_error("Missing Information", "Please select a save folder.")
+            return False
+
+        if not settings_to_validate.get('db_path'):
+            self.show_error("Missing Information", "Please select or create a database file.")
             return False
             
         # Basic check for numeric API ID
@@ -1041,6 +1065,9 @@ class MainWindow(QMainWindow):
         # Disable AI Categorization options while running
         self.ai_categorization_checkbox.setEnabled(not is_running)
         self.categories_file_button.setEnabled(not is_running)
+
+        # Disable Database selection while running
+        self.db_button.setEnabled(not is_running)
         
         # Viewer button should always be enabled.
         self.viewer_button.setEnabled(True)
@@ -1088,6 +1115,40 @@ class MainWindow(QMainWindow):
              self.folder_label.setText("No folder selected.")
              if folder: # If it was set but invalid, clear it
                 self.settings.remove("downloader/save_folder")
+        
+        # Load Database Path
+        db_path_setting = self.settings.value("downloader/db_path", "")
+        default_db_filename = "telegram_images.sqlite"
+        # If no path is set, or if the set path doesn't exist, try to default to one in the app's dir or save folder
+        if not db_path_setting or not os.path.exists(db_path_setting):
+            # Try to find/create a default in the application's directory
+            app_dir_default_db = os.path.join(os.path.dirname(__file__), default_db_filename)
+            if os.path.exists(app_dir_default_db):
+                self.current_db_path = app_dir_default_db
+            elif folder and os.path.isdir(folder): # If save folder is set, propose default there
+                self.current_db_path = os.path.join(folder, default_db_filename)
+            else: # Fallback to app directory even if it doesn't exist yet (will be created)
+                self.current_db_path = app_dir_default_db
+            
+            # If we decided on a path that doesn't exist, it will be created on first init
+            # We update the setting if we picked a default
+            if self.current_db_path and self.current_db_path != db_path_setting:
+                 self.settings.setValue("downloader/db_path", self.current_db_path)
+        else:
+            self.current_db_path = db_path_setting
+
+        if self.current_db_path:
+            self.db_label.setText(f"DB: {self.current_db_path}")
+            # Attempt to initialize it here if it's set
+            try:
+                database_handler.initialize_database(self.current_db_path)
+                # self.status_label.setText(f"Using DB: {os.path.basename(self.current_db_path)}") # Status updated later
+            except Exception as e:
+                self.show_error("DB Init Error", f"Could not initialize DB '{self.current_db_path}': {e}")
+                self.current_db_path = None # Invalidate if error
+                self.db_label.setText("Error with DB. Select/Create new.")
+        else:
+            self.db_label.setText("No database selected.")
 
 
         date_str_start = self.settings.value("downloader/start_date", "")
@@ -1188,6 +1249,12 @@ class MainWindow(QMainWindow):
 
         # --- Save to QSettings (GUI specific settings) ---
         # save_folder is saved directly in select_folder
+        # db_path is saved in select_database_file
+        if self.current_db_path: # Ensure we save the current_db_path if it's valid
+            self.settings.setValue("downloader/db_path", self.current_db_path)
+        else: # If somehow it became None, remove the setting
+            self.settings.remove("downloader/db_path")
+            
         self.settings.setValue("downloader/start_date", self.date_edit_start.date().toString(Qt.DateFormat.ISODate))
         self.settings.setValue("downloader/end_date", self.date_edit_end.date().toString(Qt.DateFormat.ISODate))
         self.settings.setValue("downloader/export_excel", self.export_excel_checkbox.isChecked())
@@ -1364,13 +1431,20 @@ class MainWindow(QMainWindow):
         # Check if a viewer window is already open, if desired, to prevent multiple instances
         # For simplicity, we'll allow multiple for now, or let the dialog be modal.
         # If it's a QDialog, .exec() makes it modal. .show() makes it modeless.
+        if not self.current_db_path:
+            self.show_error("Viewer Error", "No database selected. Please choose or create a database first.")
+            return
+            
         try:
-            # Check if database exists
-            if not os.path.exists(database_handler.DATABASE_PATH) or os.path.getsize(database_handler.DATABASE_PATH) == 0:
-                 QMessageBox.information(self, "Viewer Mode", "Database is empty or not found. Please download images first.")
+            # Check if database exists and is not empty
+            if not os.path.exists(self.current_db_path) or os.path.getsize(self.current_db_path) == 0:
+                 QMessageBox.information(self, "Viewer Mode", 
+                                         f"Database '{os.path.basename(self.current_db_path)}' is empty or not found. "
+                                         "Please download images first or select a valid database.")
                  return
 
-            self.viewer_window = image_viewer.ImageViewerWindow(self) # Pass parent
+            # Pass the current_db_path to the ImageViewerWindow constructor
+            self.viewer_window = image_viewer.ImageViewerWindow(self.current_db_path, self) # Pass db_path and parent
             self.viewer_window.show() # Use show() for a modeless dialog
         except Exception as e:
             self.show_error("Viewer Error", f"Could not open image viewer: {e}")
@@ -1392,6 +1466,39 @@ class MainWindow(QMainWindow):
                 self.progress_bar.setFormat("%v")  # Simpler format for small widths
             else:
                 self.progress_bar.setFormat("%v files downloaded")
+
+    def select_database_file(self):
+        """Opens a dialog to select or create a SQLite database file."""
+        last_db_folder = self.settings.value("downloader/last_db_dialog_path", os.path.expanduser("~"))
+        
+        # QFileDialog.getSaveFileName can be used for both selecting existing and specifying a new file
+        db_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Select or Create Database File",
+            last_db_folder,
+            "SQLite Database Files (*.sqlite *.db *.sqlite3);;All Files (*)"
+        )
+        
+        if db_path:
+            # Ensure the file has a .sqlite extension if user didn't provide one
+            if not db_path.lower().endswith((".sqlite", ".db", ".sqlite3")):
+                db_path += ".sqlite"
+
+            self.current_db_path = db_path
+            self.db_label.setText(f"DB: {self.current_db_path}")
+            self.settings.setValue("downloader/db_path", self.current_db_path)
+            self.settings.setValue("downloader/last_db_dialog_path", os.path.dirname(self.current_db_path))
+            
+            # Initialize the database (creates tables if new, or just connects if existing)
+            try:
+                database_handler.initialize_database(self.current_db_path)
+                self.status_label.setText(f"Using database: {os.path.basename(self.current_db_path)}")
+            except Exception as e:
+                self.show_error("Database Error", f"Could not initialize or use database '{self.current_db_path}': {e}")
+                self.current_db_path = None # Invalidate on error
+                self.db_label.setText("Error with DB. Select/Create new.")
+                self.status_label.setText("Database error. Please select a valid database.")
+
 
     def open_exclusion_dialog(self):
         """Open the dialog to manage exclusion patterns"""

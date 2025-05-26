@@ -16,11 +16,27 @@ except ImportError:
     import database_handler # For running script directly or if sys.path is set up
 
 class ImageViewerWindow(QDialog):
-    def __init__(self, parent=None):
+    def __init__(self, db_path, parent=None): # Added db_path argument
         super().__init__(parent)
         self.setWindowTitle("Telegram Image Viewer")
         self.setGeometry(150, 150, 1000, 700) # Initial size, can be adjusted
-        self.db_path = database_handler.DATABASE_PATH
+        
+        if not db_path or not os.path.exists(db_path):
+            # Fallback or error handling if db_path is invalid
+            # For now, let's try to use a default if possible, or raise error
+            # This situation should ideally be prevented by the calling code (MainWindow)
+            print(f"Warning: Invalid db_path '{db_path}' provided to ImageViewerWindow.")
+            # Attempt to use a default path if database_handler still has one (it shouldn't after changes)
+            # Or, more robustly, disable functionality or show an error message in the UI.
+            # For this example, we'll assume db_path is valid as MainWindow should ensure it.
+            # If database_handler.DATABASE_PATH was removed, this line below would error.
+            # self.db_path = getattr(database_handler, 'DATABASE_PATH', 'default_viewer_db.sqlite')
+            # A better approach if db_path is critical:
+            if not db_path:
+                 raise ValueError("ImageViewerWindow requires a valid database path.")
+            # If path doesn't exist, it might be an issue, but load_image_list will handle empty DB.
+            
+        self.db_path = db_path # Use the provided db_path
         self.current_selected_image_id = None # To store the ID of the selected image
 
         self.init_ui()
@@ -95,8 +111,14 @@ class ImageViewerWindow(QDialog):
             previously_selected_db_id = current_qlistwidget_item.data(Qt.ItemDataRole.UserRole)
 
         self.image_list_widget.clear()
+        if not self.db_path:
+            self.image_list_widget.addItem("Database path not set.")
+            self.info_display_area.setText("Database path not set.")
+            self.image_display_label.setText("Database path not set.")
+            return
+            
         try:
-            conn = database_handler.get_db_connection()
+            conn = database_handler.get_db_connection(self.db_path) # Pass db_path
             cursor = conn.cursor()
             # Fetch id, filename, and sanitized_caption for the list
             cursor.execute("SELECT id, filename, sanitized_caption FROM images ORDER BY id DESC")
@@ -165,9 +187,13 @@ class ImageViewerWindow(QDialog):
             return
         
         self.current_selected_image_id = image_db_id # Store for potential resize
+        
+        if not self.db_path: # Should not happen if initialized correctly
+            self.info_display_area.setText("Error: Database path not available.")
+            return
 
         try:
-            conn = database_handler.get_db_connection()
+            conn = database_handler.get_db_connection(self.db_path) # Pass db_path
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM images WHERE id = ?", (image_db_id,))
             img_data = cursor.fetchone()
@@ -249,10 +275,23 @@ if __name__ == '__main__':
     
     # First, ensure the database exists and has some data for testing
     # You might need to run telegram2.py first to populate the DB
-    if not os.path.exists(database_handler.DATABASE_PATH):
-        print(f"Database not found at {database_handler.DATABASE_PATH}. Initializing...")
-        database_handler.initialize_database()
-        print("Please run the main application (telegram2.py) to download images and populate the database first.")
+    
+    # For standalone testing, we need a specific DB path.
+    # The global DATABASE_PATH in database_handler is removed.
+    # We'll create/use a test DB in the current script's directory.
+    test_db_viewer_name = "standalone_viewer_test.sqlite"
+    test_db_viewer_path = os.path.join(os.path.dirname(__file__), test_db_viewer_name)
+
+    if not os.path.exists(test_db_viewer_path):
+        print(f"Test database not found at {test_db_viewer_path}. Initializing...")
+        try:
+            database_handler.initialize_database(test_db_viewer_path) # Initialize with specific path
+            print(f"Test database '{test_db_viewer_path}' initialized.")
+            print("Please run the main application (telegram2.py) to download images into a database, ")
+            print(f"or manually populate '{test_db_viewer_path}' for standalone testing.")
+        except Exception as e:
+            print(f"Error initializing test database '{test_db_viewer_path}': {e}")
+            sys.exit(1)
         # sys.exit() # Exit if DB is empty, or let it show "No images"
 
     app = QApplication(sys.argv)
@@ -265,6 +304,7 @@ if __name__ == '__main__':
     except Exception as e:
         print(f"Could not load stylesheet for standalone viewer: {e}")
 
-    viewer = ImageViewerWindow()
+    # Pass the test_db_viewer_path to the ImageViewerWindow
+    viewer = ImageViewerWindow(db_path=test_db_viewer_path) 
     viewer.show()
     sys.exit(app.exec())

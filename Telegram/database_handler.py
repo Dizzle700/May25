@@ -2,18 +2,21 @@ import sqlite3
 import os
 from datetime import datetime
 
-DATABASE_NAME = "telegram_images.sqlite"
-DATABASE_PATH = os.path.join(os.path.dirname(__file__), DATABASE_NAME) # Place DB in the same folder as this script
+# Removed global DATABASE_NAME and DATABASE_PATH
+# DATABASE_NAME = "telegram_images.sqlite"
+# DATABASE_PATH = os.path.join(os.path.dirname(__file__), DATABASE_NAME) # Place DB in the same folder as this script
 
-def get_db_connection():
+def get_db_connection(db_path):
     """Establishes a connection to the SQLite database."""
-    conn = sqlite3.connect(DATABASE_PATH)
+    if not db_path:
+        raise ValueError("Database path must be provided.")
+    conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row # Access columns by name
     return conn
 
-def initialize_database():
+def initialize_database(db_path):
     """Initializes the database and creates the images table if it doesn't exist."""
-    conn = get_db_connection()
+    conn = get_db_connection(db_path)
     cursor = conn.cursor()
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS images (
@@ -54,12 +57,13 @@ def initialize_database():
     conn.commit()
     conn.close()
 
-def insert_image_metadata(metadata):
+def insert_image_metadata(metadata, db_path):
     """
     Inserts image metadata into the database.
     'metadata' is a dictionary with keys matching table column names.
+    'db_path' is the path to the SQLite database file.
     """
-    conn = get_db_connection()
+    conn = get_db_connection(db_path)
     cursor = conn.cursor()
     try:
         cursor.execute("""
@@ -90,10 +94,14 @@ def insert_image_metadata(metadata):
         conn.close()
 
 if __name__ == '__main__':
-    # Initialize DB when script is run directly (for setup or testing)
-    print(f"Initializing database at: {DATABASE_PATH}")
-    initialize_database()
-    print("Database initialized.")
+    # This block is for direct script execution, e.g., for testing.
+    # You'll need to define a test_db_path to use these functions directly.
+    test_db_name = "test_telegram_images.sqlite"
+    test_db_path = os.path.join(os.path.dirname(__file__), test_db_name)
+    
+    print(f"Initializing test database at: {test_db_path}")
+    initialize_database(test_db_path)
+    print("Test database initialized.")
 
     # Example usage (optional, for testing)
     # test_data = {
@@ -102,13 +110,25 @@ if __name__ == '__main__':
     #     'image_number_in_message': 1,
     #     'caption': 'Test Caption',
     #     'filename': 'test_image.jpg',
-    #     'full_path': '/path/to/telegram/test_image.jpg',
+    #     'full_path': os.path.join(os.path.dirname(__file__), 'test_image.jpg'), # Adjusted for local test
     #     'download_date': datetime.now().strftime("%Y-%m-%d"),
     #     'download_time': datetime.now().strftime("%H:%M:%S"),
     #     'original_filename': 'original.jpg',
     #     'utc_timestamp': datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
     #     'message_group': 1,
-    #     'telegram_message_date': datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    #     'telegram_message_date': datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+    #     'ai_category': 'Test Category',
+    #     'sanitized_caption': 'Test Caption Sanitized',
+    #     'price': 10.99
     # }
-    # insert_image_metadata(test_data)
+    # # Create a dummy file for the test if full_path needs to exist for some logic
+    # # with open(test_data['full_path'], 'w') as f: f.write("dummy image data")
+    #
+    # insert_image_metadata(test_data, test_db_path)
     # print("Test data inserted (if path was unique).")
+    #
+    # # Clean up the dummy file and test database if created
+    # # if os.path.exists(test_data['full_path']):
+    # #     os.remove(test_data['full_path'])
+    # # if os.path.exists(test_db_path):
+    # #     print(f"Test database {test_db_path} can be manually deleted if no longer needed.")
