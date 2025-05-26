@@ -19,6 +19,7 @@ from PyQt6.QtGui import QPalette, QColor
 
 import database_handler # For SQLite operations
 import gemini_categorizer # For AI categorization
+import image_viewer # For the new image viewer window
 
 from telethon import TelegramClient, events
 from telethon.tl.types import MessageMediaPhoto
@@ -394,21 +395,31 @@ class DownloaderWorker(QObject):
                                     break
 
                     # Create and sanitize filename, add sequence number if multiple images in message
+                    # Determine the base name for the file
+                    file_base_name_part = ""
+                    ext = ".jpg" # Default extension
+
                     if original_filename and self.settings_dict.get('preserve_names', False):
-                        # Use original filename but add date prefix for uniqueness
-                        base_name, ext = os.path.splitext(original_filename)
-                        if not ext:
-                            ext = ".jpg"  # Default to jpg if no extension
-                        filename_base = f"{date_str}_{base_name}"
+                        base_o, ext_o = os.path.splitext(original_filename)
+                        if ext_o: # Use original extension if present
+                            ext = ext_o
+                        file_base_name_part = base_o # Use original base name
+                        filename_base_for_sanitization = f"{date_str}_{file_base_name_part}"
                     else:
-                        # Use caption-based filename
-                        filename_base = f"{date_str}_{caption_raw}"
+                        # Use sanitized caption for filename base
+                        clean_caption_for_fname = sanitize_caption_text(caption_raw)
+                        if not clean_caption_for_fname or len(clean_caption_for_fname) < 3:
+                            file_base_name_part = f"image_{message.id}" # Fallback
+                        else:
+                            file_base_name_part = clean_caption_for_fname
+                        
+                        filename_base_for_sanitization = f"{date_str}_{file_base_name_part}"
                         if message_image_count > 1:
-                            filename_base = f"{filename_base}_{message_image_count}"
-                        ext = ".jpg"
+                            filename_base_for_sanitization = f"{filename_base_for_sanitization}_{message_image_count}"
                     
-                    # Apply exclusion patterns to the filename
-                    filename_sanitized = sanitize_filename(filename_base, exclusion_patterns) + ext
+                    # Apply filename sanitization (including exclusions)
+                    # exclusion_patterns are passed from the main loop's settings_dict
+                    filename_sanitized = sanitize_filename(filename_base_for_sanitization, exclusion_patterns) + ext
                     full_path = os.path.join(self.settings_dict['save_folder'], filename_sanitized)
 
                     try:
@@ -753,19 +764,23 @@ class MainWindow(QMainWindow):
         self.start_button = QPushButton("Start Download")
         self.pause_resume_button = QPushButton("Pause")
         self.stop_button = QPushButton("Stop")
+        self.viewer_button = QPushButton("Viewer Mode") # New Viewer Button
+        self.viewer_button.setStyleSheet("background-color: #28a745; border-color: #28a745;") # Green color
 
         # Set button size policies
-        for button in [self.start_button, self.pause_resume_button, self.stop_button]:
+        for button in [self.start_button, self.pause_resume_button, self.stop_button, self.viewer_button]:
             button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
             button.setMinimumHeight(40)  # Taller buttons for better touch targets
 
         self.start_button.clicked.connect(self.start_download)
         self.pause_resume_button.clicked.connect(self.toggle_pause_resume)
         self.stop_button.clicked.connect(self.stop_download)
+        self.viewer_button.clicked.connect(self.open_image_viewer) # Connect new button
 
         button_layout.addWidget(self.start_button)
         button_layout.addWidget(self.pause_resume_button)
         button_layout.addWidget(self.stop_button)
+        button_layout.addWidget(self.viewer_button) # Add new button to layout
         layout.addLayout(button_layout)
 
         layout.addStretch() # Push status bar to bottom
@@ -968,6 +983,9 @@ class MainWindow(QMainWindow):
         # Disable AI Categorization options while running
         self.ai_categorization_checkbox.setEnabled(not is_running)
         self.categories_file_button.setEnabled(not is_running)
+        
+        # Viewer button should always be enabled unless a download is running (or based on other logic if needed)
+        self.viewer_button.setEnabled(not is_running) 
 
 
     def select_folder(self):
@@ -1270,8 +1288,27 @@ class MainWindow(QMainWindow):
                     "4. You will receive an 'App api_id' and 'App api_hash'\n"
                     "5. Enter these into '{CONFIG_FILE_PATH}' or the app fields.\n\n"
                     "Your phone number should be in international format (e.g., +1234567890).\n"
-                    "The channel should be a public channel username (e.g., @channelname) or a private channel ID."
+                    "The channel should be a public channel username (e.g., @channelname) or a private channel ID.\n\n"
+                    "Remember to set your Gemini API Key in config.ini if you wish to use AI categorization."
                 )
+
+    def open_image_viewer(self):
+        """Opens the image viewer dialog."""
+        # Check if a viewer window is already open, if desired, to prevent multiple instances
+        # For simplicity, we'll allow multiple for now, or let the dialog be modal.
+        # If it's a QDialog, .exec() makes it modal. .show() makes it modeless.
+        try:
+            # Check if database exists
+            if not os.path.exists(database_handler.DATABASE_PATH) or os.path.getsize(database_handler.DATABASE_PATH) == 0:
+                 QMessageBox.information(self, "Viewer Mode", "Database is empty or not found. Please download images first.")
+                 return
+
+            self.viewer_window = image_viewer.ImageViewerWindow(self) # Pass parent
+            self.viewer_window.show() # Use show() for a modeless dialog
+        except Exception as e:
+            self.show_error("Viewer Error", f"Could not open image viewer: {e}")
+            print(f"Error opening image viewer: {e}")
+
 
     def resizeEvent(self, event):
         """Handle window resize event"""
