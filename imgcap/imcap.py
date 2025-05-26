@@ -35,6 +35,7 @@ SETTINGS_CAPTION_PROMPT = "settings/captionPrompt"
 API_CONFIG_FILE = "config.ini" # Path to the API config file (in the same directory as imcap.py)
 API_CONFIG_SECTION = "API_SETTINGS"
 API_KEY_NAME = "GOOGLE_GEMINI_API_KEY"
+CAPTIONS_SESSION_FILE = "captions_session.json" # File to store processed captions across sessions
 
 
 # --- Worker Thread for Background Processing ---
@@ -263,7 +264,21 @@ class MainWindow(QMainWindow):
         self.worker = None # Placeholder for the worker thread
         self.processed_captions = {} # To store captions as they are generated
 
-        self._initUI()
+        self._initUI() # Initialize UI elements first
+
+        # Load processed captions from session file
+        self.captions_session_path = os.path.join(os.path.dirname(__file__), CAPTIONS_SESSION_FILE)
+        try:
+            if os.path.exists(self.captions_session_path):
+                with open(self.captions_session_path, 'r', encoding='utf-8') as f:
+                    loaded_captions = json.load(f)
+                    # Normalize keys on load
+                    self.processed_captions = {os.path.normcase(os.path.normpath(k)): v for k, v in loaded_captions.items()}
+                self._logMessage(f"Loaded {len(self.processed_captions)} captions from {CAPTIONS_SESSION_FILE}.")
+        except Exception as e:
+            self._logMessage(f"Error loading captions session file: {e}")
+            self.processed_captions = {} # Reset if loading fails
+
         self._loadSettings()
         self._updateControlsState() # Set initial button states
 
@@ -328,6 +343,14 @@ class MainWindow(QMainWindow):
         self.promptInput.setPlaceholderText(DEFAULT_CAPTION_PROMPT)
         self.promptInput.setFixedHeight(80)
         left_panel_layout.addWidget(self.promptInput)
+
+        # Add Copy Prompt Button
+        copyPromptLayout = QHBoxLayout()
+        self.copyPromptButton = QPushButton("Copy Prompt")
+        self.copyPromptButton.clicked.connect(self._copyPromptToClipboard)
+        copyPromptLayout.addStretch(1) # Push button to the right
+        copyPromptLayout.addWidget(self.copyPromptButton)
+        left_panel_layout.addLayout(copyPromptLayout)
 
         # Controls
         controlLayout = QHBoxLayout()
@@ -440,8 +463,18 @@ class MainWindow(QMainWindow):
         self._logMessage("Settings saved.")
 
     def closeEvent(self, event):
-        """Save settings when the application is closed."""
+        """Save settings and processed captions when the application is closed."""
         self._saveSettings()
+
+        # Save processed captions to session file
+        try:
+            self._logMessage(f"Attempting to save {len(self.processed_captions)} captions to {CAPTIONS_SESSION_FILE}. Data sample: {list(self.processed_captions.keys())[:2]}...")
+            with open(self.captions_session_path, 'w', encoding='utf-8') as f:
+                json.dump(self.processed_captions, f, ensure_ascii=False, indent=4)
+            self._logMessage(f"Successfully saved {len(self.processed_captions)} captions to {CAPTIONS_SESSION_FILE}.")
+        except Exception as e:
+            self._logMessage(f"Error saving captions session file: {e}")
+
         # Ensure worker thread is stopped if running
         if self.worker and self.worker.isRunning():
              self._logMessage("Attempting to stop worker thread on close...")
@@ -501,7 +534,7 @@ class MainWindow(QMainWindow):
     def _populateImageList(self, directory_path):
         """Populate the image list widget with images from the given directory."""
         self.image_list_widget.clear()
-        self.processed_captions.clear() # Clear old captions when list is repopulated
+        # self.processed_captions.clear() # DO NOT CLEAR HERE, captions are loaded from session file
         self.image_display_label.setText("Image Display Area") # Reset image display
         self.image_display_label.setPixmap(QPixmap())        # Clear any existing pixmap
         self.caption_display_text.setText("Caption for selected image will appear here.") # Reset caption display
@@ -515,9 +548,10 @@ class MainWindow(QMainWindow):
 
             for filename in os.listdir(directory_path):
                 if filename.lower().endswith(SUPPORTED_IMAGE_TYPES):
-                    # Add full path as item data, display basename
+                    full_path = os.path.join(directory_path, filename)
+                    normalized_path = os.path.normcase(os.path.normpath(full_path)) # Normalize path for consistency
                     item = QListWidgetItem(os.path.basename(filename))
-                    item.setData(Qt.ItemDataRole.UserRole, os.path.join(directory_path, filename)) # Store full path
+                    item.setData(Qt.ItemDataRole.UserRole, normalized_path) # Store normalized path
                     self.image_list_widget.addItem(item)
                     found_count += 1
             if found_count > 0:
@@ -530,11 +564,15 @@ class MainWindow(QMainWindow):
     def _onImageSelectionChanged(self, current_item, previous_item):
         """Handle selection change in the image list."""
         if current_item:
-            full_path = current_item.data(Qt.ItemDataRole.UserRole)
-            if full_path and os.path.exists(full_path):
-                self._logMessage(f"Displaying image: {os.path.basename(full_path)}")
+            # Retrieve the stored normalized path
+            normalized_path = current_item.data(Qt.ItemDataRole.UserRole)
+            # Use the original full path for image display, but normalized for caption lookup
+            original_full_path = os.path.normpath(normalized_path) # Convert back to a displayable path if needed, or just use the stored one
+
+            if original_full_path and os.path.exists(original_full_path):
+                self._logMessage(f"Displaying image: {os.path.basename(original_full_path)}")
                 try:
-                    pixmap = QPixmap(full_path)
+                    pixmap = QPixmap(original_full_path)
                     if not pixmap.isNull():
                         scaled_pixmap = pixmap.scaled(
                             self.image_display_label.size(),
@@ -542,24 +580,24 @@ class MainWindow(QMainWindow):
                             Qt.TransformationMode.SmoothTransformation
                         )
                         self.image_display_label.setPixmap(scaled_pixmap)
-                        # Check for existing caption
-                        if full_path in self.processed_captions:
-                            self.caption_display_text.setText(self.processed_captions[full_path])
+                        # Check for existing caption using the normalized path
+                        if normalized_path in self.processed_captions:
+                            self.caption_display_text.setText(self.processed_captions[normalized_path])
                         else:
-                            self.caption_display_text.setText(f"Caption for {os.path.basename(full_path)} will appear here once processed.")
+                            self.caption_display_text.setText(f"Caption for {os.path.basename(original_full_path)} will appear here once processed.")
                     else:
-                        self.image_display_label.setText(f"Error: Could not load image\n{os.path.basename(full_path)}")
+                        self.image_display_label.setText(f"Error: Could not load image\n{os.path.basename(original_full_path)}")
                         self.caption_display_text.setText("Caption for selected image will appear here.")
-                        self._logMessage(f"Error: QPixmap was null for {full_path}. Check image format/integrity.")
+                        self._logMessage(f"Error: QPixmap was null for {original_full_path}. Check image format/integrity.")
                 except Exception as e:
                     self.image_display_label.setText(f"Error displaying image:\n{e}")
                     self.caption_display_text.setText("Caption for selected image will appear here.")
-                    self._logMessage(f"Exception displaying image {full_path}: {e}")
+                    self._logMessage(f"Exception displaying image {original_full_path}: {e}")
             else:
                 self.image_display_label.setText("Image file not found.")
                 self.caption_display_text.setText("Caption for selected image will appear here.")
-                if full_path:
-                     self._logMessage(f"Error: Image path not found: {full_path}")
+                if original_full_path:
+                     self._logMessage(f"Error: Image path not found: {original_full_path}")
                 else:
                     self._logMessage(f"Error: Current item has no valid path data.")
 
@@ -600,6 +638,7 @@ class MainWindow(QMainWindow):
         self.outputFileButton.setEnabled(not processing)
         self.outputFormatCombo.setEnabled(not processing)
         self.promptInput.setEnabled(not processing)
+        self.copyPromptButton.setEnabled(not processing) # Enable/disable copy button
 
 
     def _validateInputs(self):
@@ -655,7 +694,9 @@ class MainWindow(QMainWindow):
         self._updateControlsState(processing=True) # Disable controls
         self.progressBar.setValue(0) # Reset progress bar
         self._saveSettings() # Save settings before starting
-        self.processed_captions.clear() # Clear previous run's captions
+        # Only clear processed_captions if starting a *new* processing run, not on app start
+        # This is handled by the worker thread's internal results list, not the main window's cache.
+        # self.processed_captions.clear() # Removed: This should not clear loaded captions on start.
 
         # API key is now read directly by the worker from config.ini
         input_dir = self.inputFolderInput.text()
@@ -722,9 +763,20 @@ class MainWindow(QMainWindow):
         # self.worker = None # Clear the worker reference - DO NOT DO THIS YET if results are needed
         self._updateControlsState(processing=False) # Re-enable controls
 
+    def _copyPromptToClipboard(self):
+        """Copies the current prompt text to the clipboard."""
+        clipboard = QApplication.clipboard()
+        prompt_text = self.promptInput.toPlainText()
+        if prompt_text:
+            clipboard.setText(prompt_text)
+            self._logMessage("Prompt copied to clipboard.")
+        else:
+            self._logMessage("No prompt text to copy.")
+
     def _handleSingleCaptionGenerated(self, image_path, caption_text):
         """Handles a caption generated for a single image by the worker."""
-        self.processed_captions[image_path] = caption_text
+        normalized_path = os.path.normcase(os.path.normpath(image_path)) # Normalize path before storing
+        self.processed_captions[normalized_path] = caption_text
         self._logMessage(f"Caption received for: {os.path.basename(image_path)}")
 
         # Check if this is the currently selected image
