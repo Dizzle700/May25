@@ -18,6 +18,7 @@ from PyQt6.QtCore import Qt, QThread, pyqtSignal, QObject, QSettings, QDate
 from PyQt6.QtGui import QPalette, QColor
 
 import database_handler # For SQLite operations
+import gemini_categorizer # For AI categorization
 
 from telethon import TelegramClient, events
 from telethon.tl.types import MessageMediaPhoto
@@ -202,6 +203,31 @@ class DownloaderWorker(QObject):
     async def download_images_async(self): # Renamed
         self.status_updated.emit("Connecting to Telegram...")
         session_name = "telegram_session" # Use a dedicated session file name
+
+        # AI Categorization Setup
+        ai_enabled = self.settings_dict.get('ai_categorization_enabled', False)
+        gemini_api_key = None
+        categories_list = []
+        can_categorize_ai = False
+
+        if ai_enabled:
+            self.status_updated.emit("AI Categorization enabled. Initializing...")
+            gemini_api_key = gemini_categorizer.get_gemini_api_key()
+            categories_file_path = self.settings_dict.get('categories_file_path', gemini_categorizer.DEFAULT_CATEGORIES_FILE)
+            if not categories_file_path or not os.path.exists(categories_file_path):
+                self.status_updated.emit(f"Categories file not found at '{categories_file_path}'. Using default or none.")
+                categories_file_path = gemini_categorizer.DEFAULT_CATEGORIES_FILE # Fallback
+            
+            categories_list = gemini_categorizer.load_categories(categories_file_path)
+
+            if gemini_api_key and gemini_api_key != "YOUR_GEMINI_API_KEY" and categories_list:
+                can_categorize_ai = True
+                self.status_updated.emit(f"AI Categorizer ready with {len(categories_list)} categories.")
+            else:
+                self.status_updated.emit("AI Categorization cannot proceed: API key or categories missing/invalid.")
+        else:
+            self.status_updated.emit("AI Categorization disabled.")
+
         try:
             self.client = TelegramClient(session_name,
                                          int(self.settings_dict['api_id']),
@@ -404,8 +430,24 @@ class DownloaderWorker(QObject):
                                 'original_filename': image_info['Original Filename'],
                                 'utc_timestamp': datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"), # DB record creation timestamp
                                 'message_group': image_info['Message Group'],
-                                'telegram_message_date': image_info['UTC Date'] # Original message UTC timestamp
+                                'telegram_message_date': image_info['UTC Date'], # Original message UTC timestamp
+                                'ai_category': "не применимо" # Default if AI not used or fails
                             }
+
+                            if can_categorize_ai:
+                                caption_for_ai = image_info['Caption'] # Use the already processed caption
+                                if caption_for_ai and caption_for_ai.lower() != "no_caption":
+                                    self.status_updated.emit(f"Categorizing: {filename_sanitized}...")
+                                    ai_suggested_category = gemini_categorizer.get_category_from_gemini(
+                                        caption_for_ai, 
+                                        categories_list, 
+                                        gemini_api_key
+                                    )
+                                    db_metadata['ai_category'] = ai_suggested_category
+                                    self.status_updated.emit(f"AI Category for {filename_sanitized}: {ai_suggested_category}")
+                                else:
+                                    db_metadata['ai_category'] = "нет описания" 
+                            
                             database_handler.insert_image_metadata(db_metadata)
                             
                     except Exception as download_err:
@@ -635,8 +677,26 @@ class MainWindow(QMainWindow):
         options_layout.addWidget(self.export_excel_checkbox)
         options_layout.addWidget(self.preserve_names_checkbox)
         options_layout.addWidget(self.exclusion_button)
-        options_layout.addStretch()
+        # options_layout.addStretch() # Remove stretch here to add more AI options below
         layout.addLayout(options_layout)
+
+        # --- AI Categorization Options ---
+        ai_options_layout = QHBoxLayout()
+        self.ai_categorization_checkbox = QCheckBox("Enable AI Product Categorization")
+        self.ai_categorization_checkbox.setToolTip("Uses Gemini AI to categorize product images based on caption and categories file.")
+        ai_options_layout.addWidget(self.ai_categorization_checkbox)
+        
+        self.categories_file_button = QPushButton("Select Categories File (.txt)")
+        self.categories_file_button.clicked.connect(self.select_categories_file)
+        ai_options_layout.addWidget(self.categories_file_button)
+        
+        ai_options_layout.addStretch()
+        layout.addLayout(ai_options_layout)
+
+        self.categories_file_label = QLabel("Categories file: Not selected")
+        self.categories_file_label.setWordWrap(True)
+        layout.addWidget(self.categories_file_label)
+
 
         # --- Progress Bar ---
         progress_layout = QHBoxLayout()
@@ -711,7 +771,9 @@ class MainWindow(QMainWindow):
             'start_date': self.date_edit.date(),
             'export_excel': self.export_excel_checkbox.isChecked(),
             'preserve_names': self.preserve_names_checkbox.isChecked(),
-            'exclusion_patterns': self.settings.value("downloader/exclusion_patterns_list", [], type=list)
+            'exclusion_patterns': self.settings.value("downloader/exclusion_patterns_list", [], type=list),
+            'ai_categorization_enabled': self.ai_categorization_checkbox.isChecked(),
+            'categories_file_path': self.settings.value("downloader/categories_file_path", "")
         }
 
     def validate_settings(self, settings_to_validate):
@@ -864,6 +926,11 @@ class MainWindow(QMainWindow):
 
         # Disable exclusion patterns button while running
         self.exclusion_button.setEnabled(not is_running)
+        
+        # Disable AI Categorization options while running
+        self.ai_categorization_checkbox.setEnabled(not is_running)
+        self.categories_file_button.setEnabled(not is_running)
+
 
     def select_folder(self):
         # Use QSettings to remember the last used directory for the dialog
@@ -927,6 +994,18 @@ class MainWindow(QMainWindow):
         # No need to explicitly set an attribute here, open_exclusion_dialog will load from QSettings
         # and get_current_settings will read from QSettings.
 
+        # Load AI Categorization settings
+        ai_enabled = self.settings.value("downloader/ai_categorization_enabled", False, type=bool)
+        self.ai_categorization_checkbox.setChecked(ai_enabled)
+        
+        categories_path = self.settings.value("downloader/categories_file_path", "")
+        if categories_path and os.path.exists(categories_path):
+            self.categories_file_label.setText(f"Categories file: {categories_path}")
+        else:
+            self.categories_file_label.setText("Categories file: Not selected (will use default if AI enabled)")
+            if categories_path: # Clear invalid stored path
+                 self.settings.remove("downloader/categories_file_path")
+
 
     def _create_default_config(self, config_parser_instance):
         """Creates a default config.ini file if it doesn't exist or is needed."""
@@ -942,6 +1021,10 @@ class MainWindow(QMainWindow):
             'channel': 'YOUR_CHANNEL_USERNAME_OR_ID'
             # Other downloader settings are in QSettings
         }
+        if not config_parser_instance.has_section('Gemini'):
+            config_parser_instance.add_section('Gemini')
+        config_parser_instance.set('Gemini', 'api_key', 'YOUR_GEMINI_API_KEY')
+        
         try:
             # Ensure directory exists
             os.makedirs(os.path.dirname(CONFIG_FILE_PATH), exist_ok=True)
@@ -987,6 +1070,25 @@ class MainWindow(QMainWindow):
         self.settings.setValue("downloader/export_excel", self.export_excel_checkbox.isChecked())
         self.settings.setValue("downloader/preserve_names", self.preserve_names_checkbox.isChecked())
         # exclusion_patterns_list is saved in open_exclusion_dialog
+        self.settings.setValue("downloader/ai_categorization_enabled", self.ai_categorization_checkbox.isChecked())
+        # categories_file_path is saved in select_categories_file()
+
+    def select_categories_file(self):
+        """Opens a dialog to select the categories .txt file."""
+        # Use QSettings to remember the last used directory for the dialog
+        last_cat_folder = self.settings.value("downloader/last_categories_file_dialog_path", os.path.expanduser("~"))
+        
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, 
+            "Select Categories File", 
+            last_cat_folder,
+            "Text files (*.txt);;All files (*)"
+        )
+        if file_path:
+            self.categories_file_label.setText(f"Categories file: {file_path}")
+            self.settings.setValue("downloader/categories_file_path", file_path)
+            self.settings.setValue("downloader/last_categories_file_dialog_path", os.path.dirname(file_path))
+
 
     def request_auth_code(self, phone):
         """Show a dialog to request the Telegram authentication code"""

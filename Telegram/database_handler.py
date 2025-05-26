@@ -29,9 +29,23 @@ def initialize_database():
             original_filename TEXT,
             utc_timestamp TEXT, -- ISO format datetime YYYY-MM-DD HH:MM:SS
             message_group INTEGER, -- To group images from the same message if multiple
-            telegram_message_date TEXT -- Store the original message date from Telegram (UTC)
+            telegram_message_date TEXT, -- Store the original message date from Telegram (UTC)
+            ai_category TEXT -- Category suggested by AI
         )
     """)
+    # Attempt to add the ai_category column if it doesn't exist (for existing databases)
+    try:
+        cursor.execute("ALTER TABLE images ADD COLUMN ai_category TEXT")
+        print("INFO: Column 'ai_category' added to 'images' table.")
+    except sqlite3.OperationalError as e:
+        if "duplicate column name" in str(e).lower():
+            # Column already exists, which is fine
+            pass
+        else:
+            # For other OperationalError, print it, but don't crash initialization
+            print(f"Warning: Could not add 'ai_category' column (may already exist or other issue): {e}")
+            # Depending on strictness, you might re-raise e here if it's critical
+    
     conn.commit()
     conn.close()
 
@@ -47,11 +61,11 @@ def insert_image_metadata(metadata):
             INSERT INTO images (
                 message_id, channel, image_number_in_message, caption, 
                 filename, full_path, download_date, download_time, 
-                original_filename, utc_timestamp, message_group, telegram_message_date
+                original_filename, utc_timestamp, message_group, telegram_message_date, ai_category
             ) VALUES (
                 :message_id, :channel, :image_number_in_message, :caption,
                 :filename, :full_path, :download_date, :download_time,
-                :original_filename, :utc_timestamp, :message_group, :telegram_message_date
+                :original_filename, :utc_timestamp, :message_group, :telegram_message_date, :ai_category
             )
         """, metadata)
         conn.commit()
