@@ -125,6 +125,7 @@ class ImageViewerWindow(QDialog):
             fields_to_display = {
                 "sanitized_caption": "Sanitized Caption",
                 "ai_category": "AI Category",
+                "price": "Price",
                 "channel": "Channel",
                 "telegram_message_date": "Message Date (UTC)"
             }

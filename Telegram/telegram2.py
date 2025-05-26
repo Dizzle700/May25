@@ -110,6 +110,31 @@ def sanitize_caption_text(text):
     
     return text
 
+def extract_price_from_caption(caption_text):
+    """
+    Extracts a price from the caption text.
+    Looks for patterns like "цена_123", "цена: 123", "цена 123".
+    Returns the price as a float, or None if not found.
+    """
+    if not caption_text:
+        return None
+
+    # Regex to find "цена" followed by optional colon/underscore/space and then numbers
+    # It will capture the number part.
+    # Allows for spaces around the number and optional decimal part.
+    match = re.search(r'цена[_:\s]*(\d[\d\s]*[.,]?\d*)', caption_text, re.IGNORECASE)
+    if match:
+        price_str = match.group(1)
+        # Clean up the price string: remove spaces, replace comma with dot for float conversion
+        price_str_cleaned = price_str.replace(" ", "").replace(",", ".")
+        try:
+            price = float(price_str_cleaned)
+            return price
+        except ValueError:
+            print(f"Warning: Could not convert extracted price '{price_str_cleaned}' to float.")
+            return None # Or return the string if preferred: price_str_cleaned
+    return None
+
 # --- Downloader Logic (Worker) ---
 class AuthCodeDialog(QDialog):
     def __init__(self, parent=None):
@@ -491,7 +516,8 @@ class DownloaderWorker(QObject):
                                 'message_group': image_info['Message Group'],
                                 'telegram_message_date': image_info['UTC Date'], # Original message UTC timestamp
                                 'ai_category': "не применимо", # Default if AI not used or fails
-                                'sanitized_caption': sanitize_caption_text(caption_raw) # Add sanitized caption
+                                'sanitized_caption': sanitize_caption_text(caption_raw), # Add sanitized caption
+                                'price': extract_price_from_caption(caption_raw) # Extract price
                             }
 
                             if can_categorize_ai:

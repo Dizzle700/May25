@@ -31,13 +31,15 @@ def initialize_database():
             message_group INTEGER, -- To group images from the same message if multiple
             telegram_message_date TEXT, -- Store the original message date from Telegram (UTC)
             ai_category TEXT, -- Category suggested by AI
-            sanitized_caption TEXT -- Caption cleaned of emojis and extra whitespace
+            sanitized_caption TEXT, -- Caption cleaned of emojis and extra whitespace
+            price REAL -- Extracted price from caption
         )
     """)
     # Attempt to add columns if they don't exist (for existing databases)
     columns_to_add = {
         "ai_category": "TEXT",
-        "sanitized_caption": "TEXT"
+        "sanitized_caption": "TEXT",
+        "price": "REAL"
     }
     for column_name, column_type in columns_to_add.items():
         try:
@@ -65,12 +67,12 @@ def insert_image_metadata(metadata):
                 message_id, channel, image_number_in_message, caption, 
                 filename, full_path, download_date, download_time, 
                 original_filename, utc_timestamp, message_group, telegram_message_date, 
-                ai_category, sanitized_caption
+                ai_category, sanitized_caption, price
             ) VALUES (
                 :message_id, :channel, :image_number_in_message, :caption,
                 :filename, :full_path, :download_date, :download_time,
                 :original_filename, :utc_timestamp, :message_group, :telegram_message_date, 
-                :ai_category, :sanitized_caption
+                :ai_category, :sanitized_caption, :price
             )
         """, metadata)
         conn.commit()
