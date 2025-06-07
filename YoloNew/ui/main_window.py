@@ -1,7 +1,7 @@
 from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QListWidget, QPushButton, QLabel, QSplitter,
                              QStatusBar, QProgressBar, QSpinBox, QFileDialog,
-                             QListWidgetItem, QMessageBox, QLineEdit, QFrame, QSlider)
+                             QListWidgetItem, QMessageBox, QLineEdit, QFrame, QSlider, QCheckBox, QComboBox)
 from PyQt6.QtCore import Qt, pyqtSignal, QPoint, QTimer, QMimeData
 from PyQt6.QtGui import QKeySequence, QShortcut, QDrag, QPixmap, QPainter, QFont, QColor
 import os
@@ -77,6 +77,8 @@ class MainWindow(QMainWindow):
     class_removed_requested = pyqtSignal(str) # name of class to remove
     class_selected_for_assignment = pyqtSignal(int) # index of selected class
     confidence_threshold_changed = pyqtSignal(int)
+    resize_enabled_changed = pyqtSignal(bool)
+    resize_resolution_changed = pyqtSignal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -137,6 +139,14 @@ class MainWindow(QMainWindow):
         self.augment_label = QLabel("Aug:")
         self.aug_settings_button = QPushButton("Aug Settings...")
         self.aug_settings_button.setToolTip("Configure augmentation settings")
+
+        # Resize controls
+        self.resize_checkbox = QCheckBox("Resize Output")
+        self.resize_checkbox.setToolTip("Resize images to a standard YOLO resolution upon saving")
+        self.resolution_combo = QComboBox()
+        self.resolution_combo.addItems(["416x416", "640x640", "832x832", "1280x1280"])
+        self.resolution_combo.setCurrentText("640x640")
+        self.resolution_combo.setEnabled(False) # Enabled by checkbox
         
         # Remove the separate augment button
         # self.augment_button = QPushButton("Augment Dataset")
@@ -219,6 +229,8 @@ class MainWindow(QMainWindow):
         top_layout.addWidget(self.augment_label)
         top_layout.addWidget(self.augment_spinbox)
         top_layout.addWidget(self.aug_settings_button)
+        top_layout.addWidget(self.resize_checkbox)
+        top_layout.addWidget(self.resolution_combo)
         top_layout.addWidget(self.save_button)
         
         # Create the control panel widget
@@ -311,6 +323,12 @@ class MainWindow(QMainWindow):
         self.export_classes_button.clicked.connect(self._on_export_classes)
         self.aug_settings_button.clicked.connect(self._show_augmentation_settings)
         self.confidence_slider.valueChanged.connect(self._on_confidence_changed)
+        self.resize_checkbox.toggled.connect(self._on_resize_toggled)
+        self.resolution_combo.currentTextChanged.connect(self.resize_resolution_changed)
+
+    def _on_resize_toggled(self, checked):
+        self.resolution_combo.setEnabled(checked)
+        self.resize_enabled_changed.emit(checked)
 
     def _create_shortcuts(self):
         # Example: Delete selected box with 'Delete' key

@@ -11,8 +11,9 @@ from core.models import AppData, ImageAnnotation, BoundingBox
 from core.data_handler import DataHandler
 from core.yolo_processor import YoloProcessor
 from core.image_augmenter import ImageAugmenter
-from core.workers import DetectionWorker, AugmentationWorker  # Import AugmentationWorker
+from core.workers import DetectionWorker, AugmentationWorker
 from core.state_manager import StateManager
+from core.image_resizer import resize_with_letterboxing
 from core import utils
 from core import formats
 
@@ -63,6 +64,8 @@ class AppLogic(QObject):
         self.main_window.class_removed_requested.connect(self.remove_class)
         self.main_window.class_selected_for_assignment.connect(self.assign_class_to_selected_box)
         self.main_window.confidence_threshold_changed.connect(self.on_confidence_threshold_changed)
+        self.main_window.resize_enabled_changed.connect(self.on_resize_enabled_changed)
+        self.main_window.resize_resolution_changed.connect(self.on_resize_resolution_changed)
 
     # --- Methods Triggered by UI ---
 
@@ -99,6 +102,11 @@ class AppLogic(QObject):
             # Update model label if a model was loaded
             if self.app_data.model_path:
                 self.main_window.set_model_label(self.app_data.model_path)
+
+            # Update resize controls based on loaded data
+            self.main_window.resize_checkbox.setChecked(self.app_data.resize_output_enabled)
+            self.main_window.resolution_combo.setCurrentText(self.app_data.resize_output_resolution)
+            self.main_window.resolution_combo.setEnabled(self.app_data.resize_output_enabled)
                 
             # Update button states based on loaded data
             self.update_button_states()
@@ -281,63 +289,113 @@ class AppLogic(QObject):
 
     def _continue_save_dataset(self, augmented_data, format_type, output_dir, num_augmentations):
         """Continue saving dataset after augmentation is complete or skipped"""
-        # Apply augmentation results if they exist
         if augmented_data:
             self.data_handler.add_augmented_data(augmented_data)
-            # Progress update
             self.main_window.status_bar.showMessage(f"Created {len(augmented_data)} augmented images", 3000)
-            
-        # Now save the dataset (original + any augmented images)
+
         self.main_window.set_ui_busy(True, f"Saving dataset in {format_type.upper()} format...")
-        
+
         try:
-            # Get all annotated images - including augmented ones
-            # Use get_annotated_image_paths directly instead of _get_original_image_paths
-            # to include augmented images in the export
-            annotated_paths = self.data_handler.get_annotated_image_paths()
+            data_to_save = self.app_data
+            
+            # --- Handle Resizing ---
+            if self.app_data.resize_output_enabled:
+                self.main_window.set_ui_busy(True, "Resizing images...")
+                
+                # Create a deep copy of the app_data to modify for saving
+                resized_app_data = AppData(classes=copy.deepcopy(self.app_data.classes))
+                
+                target_res_str = self.app_data.resize_output_resolution
+                try:
+                    target_w, target_h = map(int, target_res_str.split('x'))
+                except ValueError:
+                    self.main_window.show_message("Error", f"Invalid resolution format: {target_res_str}", QMessageBox.Icon.Critical)
+                    self.main_window.set_ui_busy(False)
+                    return
+
+                # Process all images that are about to be saved
+                all_paths_to_process = self.data_handler.get_annotated_image_paths()
+                
+                for i, path in enumerate(all_paths_to_process):
+                    self.main_window.update_progress(i, len(all_paths_to_process))
+                    
+                    annotation = self.app_data.images.get(path)
+                    if not annotation:
+                        continue
+
+                    # Load image data (either from disk or from temp data for augmented images)
+                    if annotation._temp_image_data is not None:
+                        image_np = annotation._temp_image_data
+                    else:
+                        image_np = cv2.imread(path)
+                        image_np = cv2.cvtColor(image_np, cv2.COLOR_BGR2RGB)
+
+                    if image_np is None:
+                        print(f"Warning: Could not load image {path}, skipping.")
+                        continue
+
+                    # Perform resizing
+                    resized_img, adjusted_boxes = resize_with_letterboxing(image_np, (target_h, target_w), annotation.boxes)
+                    
+                    # Create a new path for the resized image
+                    original_filename = os.path.basename(path)
+                    # Ensure the output directory for resized images exists
+                    resized_images_dir = os.path.join(output_dir, "resized_images")
+                    os.makedirs(resized_images_dir, exist_ok=True)
+                    new_image_path = os.path.join(resized_images_dir, original_filename)
+                    
+                    # Save the resized image
+                    # Convert back to BGR for saving with OpenCV
+                    cv2.imwrite(new_image_path, cv2.cvtColor(resized_img, cv2.COLOR_RGB2BGR))
+
+                    # Create a new annotation for the resized data
+                    new_annotation = ImageAnnotation(
+                        image_path=new_image_path,
+                        width=target_w,
+                        height=target_h,
+                        boxes=adjusted_boxes,
+                        processed=True,
+                        augmented_from=annotation.augmented_from
+                    )
+                    resized_app_data.images[new_image_path] = new_annotation
+
+                # Replace the data to be saved with the resized data
+                data_to_save = resized_app_data
+                self.main_window.set_ui_busy(True, f"Saving resized dataset...")
+
+
+            # --- Splitting and Saving ---
+            annotated_paths = list(data_to_save.images.keys())
             if not annotated_paths:
-                self.main_window.show_message("Warning", "No annotations found to save after processing.", QMessageBox.Icon.Warning)
+                self.main_window.show_message("Warning", "No annotations found to save.", QMessageBox.Icon.Warning)
                 self.main_window.set_ui_busy(False)
                 return
-            
-            # Print some information about what's being saved
-            orig_paths = [path for path, annot in self.app_data.images.items() 
-                          if annot.augmented_from is None and os.path.exists(path) and 
-                          annot.boxes and any(box.class_id >= 0 for box in annot.boxes)]
-            aug_paths = [path for path in annotated_paths if path not in orig_paths]
-            print(f"Saving dataset with {len(orig_paths)} original images and {len(aug_paths)} augmented images")
-                
-            # Create train/val split (80/20 default)
+
             train_split = 0.8
             random.shuffle(annotated_paths)
             split_idx = int(len(annotated_paths) * train_split)
             train_paths = annotated_paths[:split_idx]
             val_paths = annotated_paths[split_idx:]
-            
-            # Make sure we have at least one image in each split
+
             if not train_paths and val_paths:
-                train_paths = [val_paths[0]]
-                val_paths = val_paths[1:] if len(val_paths) > 1 else []
-            elif not val_paths and train_paths:
-                val_paths = [train_paths[-1]]
-                train_paths = train_paths[:-1] if len(train_paths) > 1 else []
-                
-            # Call the appropriate format saver
+                train_paths, val_paths = val_paths, train_paths
+
             if format_type.lower() == 'yolo':
-                formats.save_yolo(self.app_data, output_dir, train_paths, val_paths)
+                formats.save_yolo(data_to_save, output_dir, train_paths, val_paths)
             elif format_type.lower() == 'coco':
-                formats.save_coco(self.app_data, output_dir, train_paths, val_paths)
+                formats.save_coco(data_to_save, output_dir, train_paths, val_paths)
             elif format_type.lower() == 'voc':
-                formats.save_voc(self.app_data, output_dir, train_paths, val_paths)
+                formats.save_voc(data_to_save, output_dir, train_paths, val_paths)
             else:
                 raise ValueError(f"Unsupported format: {format_type}")
-                
-            # Show success message
+
             message = f"Dataset saved successfully in {format_type.upper()} format"
-            if augmented_data and num_augmentations > 0:
-                message += f" with {len(augmented_data)} augmented images"
+            if augmented_data:
+                message += f" with {len(augmented_data)} augmentations"
+            if self.app_data.resize_output_enabled:
+                 message += f" (resized to {self.app_data.resize_output_resolution})"
             self.main_window.show_message("Success", f"{message}\nLocation: {output_dir}", QMessageBox.Icon.Information)
-            
+
         except Exception as e:
             self.main_window.show_message("Error", f"Failed to save dataset: {str(e)}", QMessageBox.Icon.Critical)
             import traceback
@@ -345,7 +403,6 @@ class AppLogic(QObject):
         finally:
             self.main_window.set_ui_busy(False, "Save completed.")
             self.update_button_states()
-            # Only show original images in the UI list
             self.main_window.update_image_list(self._get_original_image_paths())
 
     def add_class(self, class_name: str):
@@ -390,6 +447,16 @@ class AppLogic(QObject):
     def on_confidence_threshold_changed(self, value: int):
         """Handle confidence threshold changes from the UI."""
         self.app_data.confidence_threshold = value / 100.0  # Convert to float
+        self.state_manager.save_state()
+
+    def on_resize_enabled_changed(self, enabled: bool):
+        """Handle resize checkbox state change."""
+        self.app_data.resize_output_enabled = enabled
+        self.state_manager.save_state()
+
+    def on_resize_resolution_changed(self, resolution: str):
+        """Handle resize resolution dropdown change."""
+        self.app_data.resize_output_resolution = resolution
         self.state_manager.save_state()
 
     # --- Methods Triggered by ImageCanvas ---
