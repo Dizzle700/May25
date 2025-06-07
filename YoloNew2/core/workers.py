@@ -45,12 +45,11 @@ class BaseWorker(QRunnable):
 
 class DetectionWorker(BaseWorker):
     """Worker for running YOLO detection."""
-    def __init__(self, processor: YoloProcessor, image_paths: List[str], image_data_dict: Dict[str, ImageAnnotation], confidence_threshold: float):
+    def __init__(self, processor: YoloProcessor, image_paths: List[str], image_data_dict: Dict[str, ImageAnnotation]):
         super().__init__()
         self.processor = processor
         self.image_paths = image_paths
         self.image_data_dict = image_data_dict # Reference to update dimensions if needed
-        self.confidence_threshold = confidence_threshold
 
     # Override run or implement _run_task used by BaseWorker.run
     @pyqtSlot()
@@ -72,7 +71,7 @@ class DetectionWorker(BaseWorker):
                          continue # Skip if dimensions are unknown
 
                 # Run detection
-                detected_boxes : List[BoundingBox] = self.processor.detect(image_path, self.confidence_threshold) # YoloProcessor handles image loading
+                detected_boxes : List[BoundingBox] = self.processor.detect(image_path) # YoloProcessor handles image loading
 
                 # Emit result for this image
                 # The AppLogic will handle updating the main AppData structure

@@ -34,6 +34,5 @@ class AppData:
     images: Dict[str, ImageAnnotation] = field(default_factory=dict) # key: image_path
     classes: List[str] = field(default_factory=list)
     model_path: Optional[str] = None
-    confidence_threshold: float = 0.25
     # Could add model management list here later
     # models: List[Dict[str,str]] = field(default_factory=list) # e.g. [{'name': 'yolov8n', 'path': '...'}, ...]

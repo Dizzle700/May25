@@ -3,7 +3,6 @@ import numpy as np
 from PyQt6.QtWidgets import QWidget, QApplication, QRubberBand, QMenu
 from PyQt6.QtGui import QPainter, QPixmap, QColor, QPen, QImage, QCursor, QAction
 from PyQt6.QtCore import Qt, QPoint, QRect, QSize, pyqtSignal
-from typing import List, Tuple
 
 from core.models import BoundingBox
 from core import utils # Assuming utils has conversion functions
@@ -16,7 +15,6 @@ class ImageCanvas(QWidget):
     new_box_request = pyqtSignal(QRect) # Emits pixel rect of newly drawn box
     delete_box_request = pyqtSignal(int) # Emits index of box to delete
     mouse_pos_changed = pyqtSignal(QPoint) # Emits pixel coordinates relative to image
-    class_assignment_request = pyqtSignal(int, int) # Emits box_index, class_id for assignment
 
     # Editing states
     IDLE = 0
@@ -56,14 +54,10 @@ class ImageCanvas(QWidget):
         self.current_state = self.IDLE
         self.selected_box_idx = -1
         self.hovered_box_idx = -1
-        self.drag_hover_box_idx = -1  # Track box being hovered during drag
         self.hovered_handle = self.HANDLE_NONE
         self.resizing_origin_rect = QRect() # Original rect before resize/move
 
         self.setMouseTracking(True) # Enable mouseMoveEvent even without button press
-
-        # Enable drop for the canvas
-        self.setAcceptDrops(True)
 
     def set_image(self, image_path: str):
         """Loads and displays an image."""
@@ -80,7 +74,7 @@ class ImageCanvas(QWidget):
             self.selected_box_idx = -1 # Deselect box on new image
             self.hovered_box_idx = -1
             self.hovered_handle = self.HANDLE_NONE
-            # Reset scale to 1.0 (meaning use the auto-scale calculation)
+            # Reset scale/offset if desired, or implement zoom/pan logic
             self.scale_factor = 1.0
             self.offset = QPoint(0, 0)
             self.update() # Trigger repaint
@@ -99,42 +93,19 @@ class ImageCanvas(QWidget):
              self.selected_box_idx = -1
         self.update()
 
-    def clear(self):
-        """Clears the canvas by resetting all image and annotation related data."""
-        self.current_image_path = None
-        self.pixmap = None
-        self.cv_image = None
-        self.annotations = []
-        self.class_names = []
-        self.selected_box_idx = -1
-        self.hovered_box_idx = -1
-        self.hovered_handle = self.HANDLE_NONE
-        self.current_state = self.IDLE
-        # Hide rubber band if it exists
-        if self.rubber_band:
-            self.rubber_band.hide()
-        self.update()  # Refresh the canvas
-
     def get_image_coords(self, event_pos: QPoint) -> QPoint | None:
         """Converts widget coordinates to image pixel coordinates."""
         if self.pixmap is None:
             return None
 
+        # Basic version without zoom/pan
+        # TODO: Add scale_factor and offset calculations for zoom/pan
         scaled_pixmap_rect = self._get_scaled_pixmap_rect()
         if not scaled_pixmap_rect.contains(event_pos):
             return None # Click outside image
 
-        # Calculate the current effective scale
-        pm_size = self.pixmap.size()
-        widget_size = self.size()
-        width_ratio = widget_size.width() / pm_size.width()
-        height_ratio = widget_size.height() / pm_size.height()
-        auto_scale = min(width_ratio, height_ratio)
-        effective_scale = auto_scale * self.scale_factor
-
-        # Convert from widget coordinates to image coordinates
-        img_x = int((event_pos.x() - scaled_pixmap_rect.x()) / effective_scale)
-        img_y = int((event_pos.y() - scaled_pixmap_rect.y()) / effective_scale)
+        img_x = int((event_pos.x() - scaled_pixmap_rect.x()) / self.scale_factor)
+        img_y = int((event_pos.y() - scaled_pixmap_rect.y()) / self.scale_factor)
 
         # Clamp to image dimensions
         img_width = self.pixmap.width()
@@ -144,33 +115,22 @@ class ImageCanvas(QWidget):
 
         return QPoint(img_x, img_y)
 
-    def _get_scaled_pixmap_rect(self):
+    def _get_scaled_pixmap_rect(self) -> QRect:
         """Calculates the rectangle where the scaled pixmap is drawn."""
         if not self.pixmap:
             return QRect()
 
         pm_size = self.pixmap.size()
+        scaled_size = pm_size * self.scale_factor
         widget_size = self.size()
 
-        # Calculate the scale factor to fit the image in the available space
-        # while maintaining aspect ratio
-        width_ratio = widget_size.width() / pm_size.width()
-        height_ratio = widget_size.height() / pm_size.height()
-        
-        # Use the smaller ratio to ensure the image fits completely
-        # This makes sure the image is always fully visible
-        auto_scale = min(width_ratio, height_ratio)
-        
-        # Apply user's manual scaling if they've zoomed in/out
-        final_scale = auto_scale * self.scale_factor
-        
-        scaled_size = pm_size * final_scale
-        
-        # Center the image
+        # Center the image (basic centering)
         x = max(0, int((widget_size.width() - scaled_size.width()) / 2)) + self.offset.x()
         y = max(0, int((widget_size.height() - scaled_size.height()) / 2)) + self.offset.y()
 
-        return QRect(QPoint(x, y), scaled_size)
+        # TODO: Improve centering/positioning with panning
+
+        return QRect(QPoint(x, y), scaled_size.toSize())
 
 
     # --- Event Handlers ---
@@ -301,49 +261,32 @@ class ImageCanvas(QWidget):
             img_w = self.pixmap.width()
             img_h = self.pixmap.height()
 
-            # Calculate the current effective scale
-            widget_size = self.size()
-            width_ratio = widget_size.width() / img_w
-            height_ratio = widget_size.height() / img_h
-            auto_scale = min(width_ratio, height_ratio)
-            effective_scale = auto_scale * self.scale_factor
-
             # Draw bounding boxes
             for i, box in enumerate(self.annotations):
                 pixels = utils.normalized_to_pixel(box.bbox_norm, img_w, img_h)
                 if not pixels: continue
                 x_min, y_min, x_max, y_max = pixels
 
-                # Scale pixel coords to widget coords using effective_scale
-                widget_x_min = target_rect.x() + x_min * effective_scale
-                widget_y_min = target_rect.y() + y_min * effective_scale
-                widget_x_max = target_rect.x() + x_max * effective_scale
-                widget_y_max = target_rect.y() + y_max * effective_scale
+                # Scale pixel coords to widget coords
+                widget_x_min = target_rect.x() + x_min * self.scale_factor
+                widget_y_min = target_rect.y() + y_min * self.scale_factor
+                widget_x_max = target_rect.x() + x_max * self.scale_factor
+                widget_y_max = target_rect.y() + y_max * self.scale_factor
                 box_rect = QRect(QPoint(int(widget_x_min), int(widget_y_min)),
                                  QPoint(int(widget_x_max), int(widget_y_max)))
 
                 # --- Styling ---
                 is_selected = (i == self.selected_box_idx)
                 is_hovered = (i == self.hovered_box_idx and self.current_state == self.IDLE)
-                is_drag_hovered = (i == self.drag_hover_box_idx)
 
                 pen_width = 2 if is_selected else 1
-                if is_drag_hovered:
-                    pen_width = 4  # Even thicker border for drag target
-                    color = QColor(0, 255, 0)  # Bright green for drag target
-                else:
-                    color = QColor("cyan") if is_selected else QColor("yellow")
-                    if is_hovered and not is_selected:
-                        color = QColor("orange")
+                color = QColor("cyan") if is_selected else QColor("yellow")
+                if is_hovered and not is_selected:
+                    color = QColor("orange")
 
                 pen = QPen(color, pen_width)
                 painter.setPen(pen)
-                painter.setBrush(Qt.BrushStyle.NoBrush)  # No fill by default
-                
-                # If being dragged over, add a semi-transparent fill
-                if is_drag_hovered:
-                    painter.setBrush(QColor(0, 255, 0, 80))  # More visible semi-transparent green
-                
+                painter.setBrush(Qt.BrushStyle.NoBrush) # No fill
                 painter.drawRect(box_rect)
 
                 # Draw class label
@@ -379,101 +322,6 @@ class ImageCanvas(QWidget):
             painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, "Load an image")
 
         painter.end()
-
-    def resizeEvent(self, event):
-        """Handle resize events to update the image scaling."""
-        super().resizeEvent(event)
-        if self.pixmap:
-            # Just trigger a repaint - the _get_scaled_pixmap_rect method
-            # will calculate the new size based on the new widget dimensions
-            self.update()
-
-    def wheelEvent(self, event):
-        """Handle wheel events for zooming in/out of the image."""
-        if self.pixmap:
-            # Get the delta value
-            delta = event.angleDelta().y()
-            
-            # Calculate zoom factor - smaller increments for smoother zoom
-            zoom_factor = 1.1 if delta > 0 else 0.9
-            
-            # Apply zoom to scale factor
-            self.scale_factor *= zoom_factor
-            
-            # Limit scale factor to reasonable bounds
-            self.scale_factor = max(0.1, min(self.scale_factor, 10.0))
-            
-            # Update the display
-            self.update()
-
-    def dragEnterEvent(self, event):
-        """Handle drag enter events - accept if it's a class being dragged."""
-        if event.mimeData().hasText():
-            event.acceptProposedAction()
-        else:
-            event.ignore()
-
-    def dragMoveEvent(self, event):
-        """Handle drag move events - change cursor based on hover over a box."""
-        if event.mimeData().hasText() and self.pixmap:
-            widget_pos = event.position().toPoint()
-            handle, box_idx = self._check_handle_or_box_hover(widget_pos)
-            
-            if box_idx != -1:
-                # We're hovering over a box, indicate that this is a valid drop target
-                event.acceptProposedAction()
-                # Temporarily set the drag hovered box
-                if self.drag_hover_box_idx != box_idx:
-                    self.drag_hover_box_idx = box_idx
-                    self.update()  # Redraw to show hover effect
-            else:
-                event.ignore()
-                # Clear hover if we were previously hovering over a box
-                if self.drag_hover_box_idx != -1:
-                    self.drag_hover_box_idx = -1
-                    self.update()  # Redraw to remove hover effect
-        else:
-            event.ignore()
-
-    def dropEvent(self, event):
-        """Handle drop events - assign class to the box."""
-        if self.pixmap and event.mimeData().hasText():
-            widget_pos = event.position().toPoint()
-            handle, box_idx = self._check_handle_or_box_hover(widget_pos)
-            
-            if box_idx != -1:
-                # Get the class name directly from the text data
-                class_name = event.mimeData().text()
-                
-                try:
-                    # Find the class index
-                    if class_name in self.class_names:
-                        class_id = self.class_names.index(class_name)
-                        # Emit signal to assign this class to the box
-                        self.class_assignment_request.emit(box_idx, class_id)
-                        event.acceptProposedAction()
-                        
-                        # Find MainWindow to update status bar
-                        parent = self.parent()
-                        while parent:
-                            if hasattr(parent, 'statusBar'):
-                                parent.statusBar().showMessage(f"Assigned class '{class_name}' to box #{box_idx+1}", 3000)
-                                break
-                            parent = parent.parent()
-                    else:
-                        print(f"Class '{class_name}' not found in class list")
-                        event.ignore()
-                except Exception as e:
-                    print(f"Error during class assignment: {e}")
-                    event.ignore()
-            else:
-                event.ignore()
-                
-            # Clear hover state
-            self.drag_hover_box_idx = -1
-            self.update()
-        else:
-            event.ignore()
 
     # --- Helper Methods ---
 
@@ -513,23 +361,16 @@ class ImageCanvas(QWidget):
         img_h = self.pixmap.height()
         hs = self.HANDLE_SIZE // 2
 
-        # Calculate the current effective scale
-        widget_size = self.size()
-        width_ratio = widget_size.width() / img_w
-        height_ratio = widget_size.height() / img_h
-        auto_scale = min(width_ratio, height_ratio)
-        effective_scale = auto_scale * self.scale_factor
-
         # Check handles first (only for the selected box)
         if self.selected_box_idx != -1:
             box = self.annotations[self.selected_box_idx]
             pixels = utils.normalized_to_pixel(box.bbox_norm, img_w, img_h)
             if pixels:
                 x_min, y_min, x_max, y_max = pixels
-                widget_x_min = target_rect.x() + x_min * effective_scale
-                widget_y_min = target_rect.y() + y_min * effective_scale
-                widget_x_max = target_rect.x() + x_max * effective_scale
-                widget_y_max = target_rect.y() + y_max * effective_scale
+                widget_x_min = target_rect.x() + x_min * self.scale_factor
+                widget_y_min = target_rect.y() + y_min * self.scale_factor
+                widget_x_max = target_rect.x() + x_max * self.scale_factor
+                widget_y_max = target_rect.y() + y_max * self.scale_factor
                 box_rect = QRect(QPoint(int(widget_x_min), int(widget_y_min)),
                                  QPoint(int(widget_x_max), int(widget_y_max)))
 
@@ -559,10 +400,10 @@ class ImageCanvas(QWidget):
             pixels = utils.normalized_to_pixel(box.bbox_norm, img_w, img_h)
             if not pixels: continue
             x_min, y_min, x_max, y_max = pixels
-            widget_x_min = target_rect.x() + x_min * effective_scale
-            widget_y_min = target_rect.y() + y_min * effective_scale
-            widget_x_max = target_rect.x() + x_max * effective_scale
-            widget_y_max = target_rect.y() + y_max * effective_scale
+            widget_x_min = target_rect.x() + x_min * self.scale_factor
+            widget_y_min = target_rect.y() + y_min * self.scale_factor
+            widget_x_max = target_rect.x() + x_max * self.scale_factor
+            widget_y_max = target_rect.y() + y_max * self.scale_factor
             box_rect = QRect(QPoint(int(widget_x_min), int(widget_y_min)),
                              QPoint(int(widget_x_max), int(widget_y_max)))
             if box_rect.contains(widget_pos):
@@ -602,26 +443,14 @@ class ImageCanvas(QWidget):
         """Updates selected box position during drag."""
         if self.selected_box_idx == -1 or self.pixmap is None: return
 
-        # Get current effective scale
-        widget_size = self.size()
-        img_w = self.pixmap.width()
-        img_h = self.pixmap.height()
-        width_ratio = widget_size.width() / img_w
-        height_ratio = widget_size.height() / img_h
-        auto_scale = min(width_ratio, height_ratio)
-        effective_scale = auto_scale * self.scale_factor
-
-        # Calculate delta in widget coordinates
         delta = current_widget_pos - self.origin
-        
-        # Convert delta to image coordinates by dividing by effective scale
-        delta_img = QPoint(int(delta.x() / effective_scale), int(delta.y() / effective_scale))
-        
         # Apply delta to the original pixel rect where move started
-        new_top_left = self.resizing_origin_rect.topLeft() + delta_img
-        new_rect = QRect(new_top_left, self.resizing_origin_rect.size())
+        new_top_left = self.resizing_origin_rect.topLeft() + delta / self.scale_factor
+        new_rect = QRect(new_top_left.toPoint(), self.resizing_origin_rect.size())
 
         # Clamp to image boundaries
+        img_w = self.pixmap.width()
+        img_h = self.pixmap.height()
         new_rect.setX(max(0, new_rect.x()))
         new_rect.setY(max(0, new_rect.y()))
         new_rect.setRight(min(img_w - 1, new_rect.right()))
@@ -634,69 +463,40 @@ class ImageCanvas(QWidget):
         )
         if bbox_norm:
             self.annotations[self.selected_box_idx].bbox_norm = bbox_norm
+            # Optionally update pixel coords too
+            # self.annotations[self.selected_box_idx].bbox_pixels = (new_rect.left(), new_rect.top(), new_rect.right(), new_rect.bottom())
 
     def _resize_selected_box(self, current_widget_pos: QPoint):
         """Updates selected box size during resize drag."""
         if self.selected_box_idx == -1 or self.pixmap is None or self.hovered_handle == self.HANDLE_NONE: return
 
-        # Get image coordinates for current mouse position
         current_img_pos = self.get_image_coords(current_widget_pos)
         if not current_img_pos: return
 
-        # Start with the original rectangle
-        new_rect = QRect(self.resizing_origin_rect)
+        new_rect = QRect(self.resizing_origin_rect) # Start with original rect
         img_x = current_img_pos.x()
         img_y = current_img_pos.y()
 
         # Adjust rect based on the handle being dragged
-        if self.hovered_handle == self.HANDLE_TOP_LEFT:
-            new_rect.setTop(img_y)
-            new_rect.setLeft(img_x)
-        elif self.hovered_handle == self.HANDLE_TOP_RIGHT:
-            new_rect.setTop(img_y)
-            new_rect.setRight(img_x)
-        elif self.hovered_handle == self.HANDLE_BOTTOM_LEFT:
-            new_rect.setBottom(img_y)
-            new_rect.setLeft(img_x)
-        elif self.hovered_handle == self.HANDLE_BOTTOM_RIGHT:
-            new_rect.setBottom(img_y)
-            new_rect.setRight(img_x)
-        elif self.hovered_handle == self.HANDLE_TOP:
-            new_rect.setTop(img_y)
-        elif self.hovered_handle == self.HANDLE_BOTTOM:
-            new_rect.setBottom(img_y)
-        elif self.hovered_handle == self.HANDLE_LEFT:
-            new_rect.setLeft(img_x)
-        elif self.hovered_handle == self.HANDLE_RIGHT:
-            new_rect.setRight(img_x)
+        if self.hovered_handle & self.HANDLE_TOP: new_rect.setTop(img_y)
+        if self.hovered_handle & self.HANDLE_BOTTOM: new_rect.setBottom(img_y)
+        if self.hovered_handle & self.HANDLE_LEFT: new_rect.setLeft(img_x)
+        if self.hovered_handle & self.HANDLE_RIGHT: new_rect.setRight(img_x)
 
-        # Ensure width/height positive
-        new_rect = new_rect.normalized()
+        new_rect = new_rect.normalized() # Ensure width/height positive
 
         # Clamp to image boundaries and minimum size
         img_w = self.pixmap.width()
         img_h = self.pixmap.height()
-        min_size = 5  # Minimum 5 pixels for width and height
-        
-        if new_rect.width() < min_size:
-            # If resizing from left edge, adjust left edge
-            if self.hovered_handle & self.HANDLE_LEFT:
-                new_rect.setLeft(new_rect.right() - min_size)
-            else:
-                new_rect.setRight(new_rect.left() + min_size)
-        
-        if new_rect.height() < min_size:
-            # If resizing from top edge, adjust top edge
-            if self.hovered_handle & self.HANDLE_TOP:
-                new_rect.setTop(new_rect.bottom() - min_size)
-            else:
-                new_rect.setBottom(new_rect.top() + min_size)
+        min_size = 5
+        if new_rect.width() < min_size: new_rect.setWidth(min_size)
+        if new_rect.height() < min_size: new_rect.setHeight(min_size)
 
-        # Keep box within image boundaries
         new_rect.setLeft(max(0, new_rect.left()))
         new_rect.setTop(max(0, new_rect.top()))
         new_rect.setRight(min(img_w - 1, new_rect.right()))
         new_rect.setBottom(min(img_h - 1, new_rect.bottom()))
+
 
         # Convert back to normalized and update
         bbox_norm = utils.pixel_to_normalized(
@@ -705,6 +505,7 @@ class ImageCanvas(QWidget):
         )
         if bbox_norm:
             self.annotations[self.selected_box_idx].bbox_norm = bbox_norm
+
 
     def _show_context_menu(self, pos: QPoint, box_index: int):
         """Shows context menu for the selected bounding box."""

@@ -31,7 +31,7 @@ class YoloProcessor:
         """Checks if a model is currently loaded."""
         return self.model is not None
 
-    def detect(self, image_path: str) -> List[BoundingBox]:
+    def detect(self, image_path: str, confidence_threshold: float = 0.25) -> List[BoundingBox]:
         """Runs detection on a single image."""
         if not self.is_model_loaded():
             print("Error: No YOLO model loaded.")
@@ -41,7 +41,7 @@ class YoloProcessor:
         try:
             # Run inference
             # results is a list, usually with one element for one image
-            results = self.model(image_path, verbose=False) # verbose=False reduces console output
+            results = self.model(image_path, conf=confidence_threshold, verbose=False) # verbose=False reduces console output
 
             if results and results[0].boxes:
                 boxes_data = results[0].boxes

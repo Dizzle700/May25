@@ -764,14 +764,15 @@ class MainWindow(QMainWindow):
         self._updateControlsState(processing=False) # Re-enable controls
 
     def _copyPromptToClipboard(self):
-        """Copies the current prompt text to the clipboard."""
+        """Copies the current active image's generated caption to the clipboard."""
         clipboard = QApplication.clipboard()
-        prompt_text = self.promptInput.toPlainText()
-        if prompt_text:
-            clipboard.setText(prompt_text)
-            self._logMessage("Prompt copied to clipboard.")
+        caption_text = self.caption_display_text.toPlainText()
+        # Check if the text is a generated caption or the placeholder
+        if caption_text and not caption_text.startswith("Caption for ") and not caption_text.startswith("Error:"):
+            clipboard.setText(caption_text)
+            self._logMessage("Generated caption copied to clipboard.")
         else:
-            self._logMessage("No prompt text to copy.")
+            self._logMessage("No generated caption to copy or placeholder text displayed.")
 
     def _handleSingleCaptionGenerated(self, image_path, caption_text):
         """Handles a caption generated for a single image by the worker."""

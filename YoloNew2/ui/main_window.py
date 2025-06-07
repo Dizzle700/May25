@@ -1,7 +1,7 @@
 from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QListWidget, QPushButton, QLabel, QSplitter,
                              QStatusBar, QProgressBar, QSpinBox, QFileDialog,
-                             QListWidgetItem, QMessageBox, QLineEdit, QFrame, QSlider)
+                             QListWidgetItem, QMessageBox, QLineEdit, QFrame)
 from PyQt6.QtCore import Qt, pyqtSignal, QPoint, QTimer, QMimeData
 from PyQt6.QtGui import QKeySequence, QShortcut, QDrag, QPixmap, QPainter, QFont, QColor
 import os
@@ -76,7 +76,6 @@ class MainWindow(QMainWindow):
     class_added_requested = pyqtSignal(str) # name of new class
     class_removed_requested = pyqtSignal(str) # name of class to remove
     class_selected_for_assignment = pyqtSignal(int) # index of selected class
-    confidence_threshold_changed = pyqtSignal(int)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -120,13 +119,6 @@ class MainWindow(QMainWindow):
         self.process_button.setEnabled(False)
         self.progress_bar = QProgressBar()
         self.progress_bar.setVisible(False) # Hide initially
-
-        # Confidence Threshold Slider
-        self.confidence_slider = QSlider(Qt.Orientation.Horizontal)
-        self.confidence_slider.setRange(0, 100)
-        self.confidence_slider.setValue(25)
-        self.confidence_slider.setToolTip("Set confidence threshold for YOLO processing")
-        self.confidence_label = QLabel("Conf: 25%")
         
         # Create combined save dataset button and options
         self.save_button = QPushButton("Save Dataset...")
@@ -205,8 +197,6 @@ class MainWindow(QMainWindow):
         
         # Third group: Processing
         top_layout.addWidget(self.process_button)
-        top_layout.addWidget(self.confidence_label)
-        top_layout.addWidget(self.confidence_slider)
         top_layout.addWidget(self.progress_bar, 1)  # Give progress bar stretch factor
         
         # Add a vertical separator line
@@ -310,7 +300,6 @@ class MainWindow(QMainWindow):
         self.import_classes_button.clicked.connect(self._on_import_classes)
         self.export_classes_button.clicked.connect(self._on_export_classes)
         self.aug_settings_button.clicked.connect(self._show_augmentation_settings)
-        self.confidence_slider.valueChanged.connect(self._on_confidence_changed)
 
     def _create_shortcuts(self):
         # Example: Delete selected box with 'Delete' key
@@ -339,10 +328,6 @@ class MainWindow(QMainWindow):
              class_index = self.class_list_widget.row(selected_items[0])
              self.class_selected_for_assignment.emit(class_index)
 
-    def _on_confidence_changed(self, value):
-        """Handle confidence slider value change."""
-        self.confidence_label.setText(f"Conf: {value}%")
-        self.confidence_threshold_changed.emit(value)
 
     def _on_add_class(self):
         class_name = self.add_class_input.text().strip()

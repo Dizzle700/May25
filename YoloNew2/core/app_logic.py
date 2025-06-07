@@ -62,7 +62,6 @@ class AppLogic(QObject):
         self.main_window.class_added_requested.connect(self.add_class)
         self.main_window.class_removed_requested.connect(self.remove_class)
         self.main_window.class_selected_for_assignment.connect(self.assign_class_to_selected_box)
-        self.main_window.confidence_threshold_changed.connect(self.on_confidence_threshold_changed)
 
     # --- Methods Triggered by UI ---
 
@@ -189,7 +188,7 @@ class AppLogic(QObject):
         self.main_window.set_ui_busy(True, f"Running detection on {len(image_paths)} image(s)...")
 
         # --- Worker Thread ---
-        worker = DetectionWorker(self.yolo_processor, image_paths, self.app_data.images, self.app_data.confidence_threshold)
+        worker = DetectionWorker(self.yolo_processor, image_paths, self.app_data.images)
         # Connect signals from worker to AppLogic slots
         worker.signals.result.connect(self._handle_detection_result)
         worker.signals.finished.connect(self._on_detection_finished)
@@ -386,11 +385,6 @@ class AppLogic(QObject):
                      
                      # Save state after changing a box's class
                      self.state_manager.save_state()
-
-    def on_confidence_threshold_changed(self, value: int):
-        """Handle confidence threshold changes from the UI."""
-        self.app_data.confidence_threshold = value / 100.0  # Convert to float
-        self.state_manager.save_state()
 
     # --- Methods Triggered by ImageCanvas ---
 
@@ -742,6 +736,13 @@ class AppLogic(QObject):
                 "noise": settings.get("noise", {}).get("enabled", True),
                 "blur": settings.get("blur", {}).get("enabled", True)
             }
+
+            # Update target size for resizing
+            config.target_size = settings.get("target_size", None)
+            if config.target_size is not None:
+                print(f"Augmentation target size set to: {config.target_size}x{config.target_size}")
+            else:
+                print("Augmentation target size set to: None (Original Size)")
             
             # Log the changes
             print("Augmentation settings updated successfully")
