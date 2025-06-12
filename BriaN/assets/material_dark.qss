@@ -1,0 +1,252 @@
+/*
+    Basic Material Dark Stylesheet Placeholder
+    You'll need to expand this significantly for a full Material look.
+    Consider using a library like qt-material or QDarkStyleSheet for a more complete theme,
+    or spend time crafting detailed QSS.
+*/
+
+QWidget {
+    background-color: #2E2E2E; /* Dark gray background */
+    color: #E0E0E0; /* Light gray text */
+    font-family: "Segoe UI", Arial, sans-serif; /* Or Roboto, Open Sans */
+    font-size: 10pt;
+}
+
+QMainWindow {
+    background-color: #2E2E2E;
+}
+
+QMenuBar {
+    background-color: #3C3C3C;
+    color: #E0E0E0;
+}
+QMenuBar::item {
+    background-color: transparent;
+    padding: 4px 8px;
+}
+QMenuBar::item:selected {
+    background-color: #555555; /* Slightly lighter on hover/selection */
+}
+QMenu {
+    background-color: #3C3C3C;
+    border: 1px solid #555555;
+    padding: 5px;
+}
+QMenu::item {
+    padding: 4px 20px 4px 20px;
+}
+QMenu::item:selected {
+    background-color: #007ACC; /* Accent color for selection */
+    color: #FFFFFF;
+}
+QMenu::separator {
+    height: 1px;
+    background: #555555;
+    margin-left: 10px;
+    margin-right: 5px;
+}
+
+
+QLabel {
+    background-color: transparent;
+    padding: 2px;
+}
+
+QLabel[font-weight="bold"], QLabel > b { /* For <b> tags in QLabel */
+    font-weight: bold;
+    color: #B0B0B0; /* Slightly brighter for titles */
+}
+
+QPushButton {
+    background-color: #007ACC; /* Accent color for buttons */
+    color: #FFFFFF;
+    border: 1px solid #005C99;
+    padding: 6px 12px;
+    min-height: 20px; /* Ensure buttons have some height */
+    border-radius: 4px; /* Rounded corners */
+}
+QPushButton:hover {
+    background-color: #005C99; /* Darker on hover */
+    border-color: #004C80;
+}
+QPushButton:pressed {
+    background-color: #004C80; /* Even darker when pressed */
+}
+QPushButton:disabled {
+    background-color: #555555;
+    color: #888888;
+    border-color: #444444;
+}
+
+QLineEdit, QTextEdit {
+    background-color: #3C3C3C;
+    border: 1px solid #555555;
+    padding: 5px;
+    border-radius: 3px;
+    color: #E0E0E0;
+}
+QLineEdit:focus, QTextEdit:focus {
+    border: 1px solid #007ACC; /* Accent color on focus */
+}
+QLineEdit:read-only {
+    background-color: #4A4A4A;
+}
+
+
+QComboBox {
+    background-color: #3C3C3C;
+    border: 1px solid #555555;
+    padding: 4px;
+    min-height: 20px;
+    border-radius: 3px;
+}
+QComboBox:hover {
+    border-color: #007ACC;
+}
+QComboBox::drop-down {
+    subcontrol-origin: padding;
+    subcontrol-position: top right;
+    width: 20px;
+    border-left-width: 1px;
+    border-left-color: #555555;
+    border-left-style: solid;
+    border-top-right-radius: 3px;
+    border-bottom-right-radius: 3px;
+}
+QComboBox::down-arrow {
+    image: url(assets/icons/down_arrow.png); /* You'll need a down_arrow.png icon */
+    width: 12px;
+    height: 12px;
+}
+QComboBox QAbstractItemView { /* Dropdown list style */
+    background-color: #3C3C3C;
+    border: 1px solid #555555;
+    selection-background-color: #007ACC;
+    color: #E0E0E0;
+    padding: 2px;
+}
+
+QProgressBar {
+    border: 1px solid #555555;
+    border-radius: 3px;
+    text-align: center;
+    background-color: #3C3C3C;
+    color: #E0E0E0;
+}
+QProgressBar::chunk {
+    background-color: #007ACC; /* Accent color for progress */
+    width: 10px; /* Width of the progress segments */
+    margin: 0.5px;
+}
+
+QSplitter::handle {
+    background-color: #4A4A4A; /* Color of the splitter handle */
+    border: 1px solid #3C3C3C;
+}
+QSplitter::handle:horizontal {
+    width: 5px;
+}
+QSplitter::handle:vertical {
+    height: 5px;
+}
+QSplitter::handle:hover {
+    background-color: #5A5A5A;
+}
+
+QFrame[frameShape="StyledPanel"] { /* Group box like frames */
+    border: 1px solid #4A4A4A;
+    border-radius: 4px;
+    margin-top: 0.5em; /* Space for the title if any */
+    padding: 0.5em;
+}
+/* If you use QGroupBox instead of QFrame for grouping:
+QGroupBox {
+    border: 1px solid #4A4A4A;
+    border-radius: 4px;
+    margin-top: 0.5em;
+}
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    padding: 0 3px;
+    color: #B0B0B0;
+}
+*/
+
+
+QGraphicsView {
+    background-color: #252525; /* Slightly darker for canvas background */
+    border: 1px solid #4A4A4A;
+}
+
+QListWidget {
+    background-color: #333333;
+    border: 1px solid #4A4A4A;
+    padding: 3px;
+}
+QListWidget::item {
+    background-color: transparent; /* Or #3C3C3C */
+    color: #D0D0D0;
+    padding: 5px;
+    border-radius: 3px; /* if you want rounded items */
+    margin: 2px;
+}
+QListWidget::item:selected {
+    background-color: #007ACC; /* Accent color for selection */
+    color: #FFFFFF;
+}
+QListWidget::item:hover {
+    background-color: #4A4A4A; /* Slightly lighter on hover */
+}
+
+/* Scrollbars */
+QScrollBar:vertical {
+    border: 1px solid #4A4A4A;
+    background: #3C3C3C;
+    width: 15px;
+    margin: 0px 0px 0px 0px;
+}
+QScrollBar::handle:vertical {
+    background: #5A5A5A;
+    min-height: 20px;
+    border-radius: 7px;
+}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 0px; /* Hide default arrows */
+    subcontrol-position: top;
+    subcontrol-origin: margin;
+}
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+    background: none;
+}
+
+QScrollBar:horizontal {
+    border: 1px solid #4A4A4A;
+    background: #3C3C3C;
+    height: 15px;
+    margin: 0px 0px 0px 0px;
+}
+QScrollBar::handle:horizontal {
+    background: #5A5A5A;
+    min-width: 20px;
+    border-radius: 7px;
+}
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+    width: 0px;
+    subcontrol-position: left;
+    subcontrol-origin: margin;
+}
+QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {
+    background: none;
+}
+
+QMessageBox {
+    background-color: #3C3C3C;
+}
+QMessageBox QLabel { /* For text inside QMessageBox */
+    color: #E0E0E0;
+    background-color: transparent;
+}
+QMessageBox QPushButton { /* Buttons inside QMessageBox */
+    min-width: 70px;
+}
