@@ -107,6 +107,9 @@ class AppLogic(QObject):
             self.main_window.resize_checkbox.setChecked(self.app_data.resize_output_enabled)
             self.main_window.resolution_combo.setCurrentText(self.app_data.resize_output_resolution)
             self.main_window.resolution_combo.setEnabled(self.app_data.resize_output_enabled)
+
+            # Apply loaded augmentation settings to the image augmenter
+            self._apply_augmentation_settings_to_augmenter()
                 
             # Update button states based on loaded data
             self.update_button_states()
@@ -758,64 +761,131 @@ class AppLogic(QObject):
             )
 
     def set_augmentation_settings(self, settings: dict):
-        """Apply augmentation settings to the image augmenter.
-        
-        Args:
-            settings: Dictionary containing augmentation settings
-        """
+        """Apply augmentation settings to the image augmenter and save them."""
         try:
-            # Create a new configuration object
-            config = self.image_augmenter.config
+            # Update the app_data.augmentation_settings from the dialog
+            aug_settings = self.app_data.augmentation_settings
             
             # Update geometric transform settings
             if "geometric" in settings:
-                geo_settings = settings["geometric"]
-                config.geometric_transforms_prob = geo_settings.get("probability", 0.5)
-                config.hflip_prob = geo_settings.get("hflip_prob", 0.5)
-                config.vflip_prob = geo_settings.get("vflip_prob", 0.5)
-                config.rotate_prob = geo_settings.get("rotate_prob", 0.3)
-                config.rotate_limit = geo_settings.get("rotate_limit", 30)
-            
+                geo = settings["geometric"]
+                aug_settings.geometric_transforms_prob = geo.get("probability", 0.5)
+                aug_settings.hflip_prob = geo.get("hflip_prob", 0.5)
+                aug_settings.vflip_prob = geo.get("vflip_prob", 0.5)
+                aug_settings.rotate_prob = geo.get("rotate_prob", 0.3)
+                aug_settings.rotate_limit = geo.get("rotate_limit", 30)
+                aug_settings.shift_scale_rotate_prob = geo.get("shift_scale_rotate_prob", 0.3)
+                aug_settings.elastic_transform_prob = geo.get("elastic_transform_prob", 0.1)
+                aug_settings.grid_distortion_prob = geo.get("grid_distortion_prob", 0.1)
+                aug_settings.optical_distortion_prob = geo.get("optical_distortion_prob", 0.1)
+                aug_settings.enabled_transforms["geometric"] = geo.get("enabled", True)
+
             # Update color transform settings
             if "color" in settings:
-                color_settings = settings["color"]
-                config.color_transforms_prob = color_settings.get("probability", 0.5)
-                config.brightness_contrast_prob = color_settings.get("brightness_contrast_prob", 0.5)
-                config.hue_saturation_prob = color_settings.get("hue_saturation_prob", 0.3)
-                config.rgb_shift_prob = color_settings.get("rgb_shift_prob", 0.3)
-            
-            # Update weather transform settings
+                color = settings["color"]
+                aug_settings.color_transforms_prob = color.get("probability", 0.5)
+                aug_settings.brightness_contrast_prob = color.get("brightness_contrast_prob", 0.5)
+                aug_settings.hue_saturation_prob = color.get("hue_saturation_prob", 0.3)
+                aug_settings.rgb_shift_prob = color.get("rgb_shift_prob", 0.3)
+                aug_settings.clahe_prob = color.get("clahe_prob", 0.3)
+                aug_settings.channel_shuffle_prob = color.get("channel_shuffle_prob", 0.1)
+                aug_settings.gamma_prob = color.get("gamma_prob", 0.3)
+                aug_settings.enabled_transforms["color"] = color.get("enabled", True)
+
+            # Update other transform settings
             if "weather" in settings:
-                weather_settings = settings["weather"]
-                config.weather_transforms_prob = weather_settings.get("probability", 0.3)
-            
-            # Update noise transform settings
+                weather = settings["weather"]
+                aug_settings.weather_transforms_prob = weather.get("probability", 0.3)
+                aug_settings.fog_prob = weather.get("fog_prob", 0.3)
+                aug_settings.rain_prob = weather.get("rain_prob", 0.2)
+                aug_settings.sunflare_prob = weather.get("sunflare_prob", 0.1)
+                aug_settings.shadow_prob = weather.get("shadow_prob", 0.2)
+                aug_settings.enabled_transforms["weather"] = weather.get("enabled", True)
             if "noise" in settings:
-                noise_settings = settings["noise"]
-                config.noise_transforms_prob = noise_settings.get("probability", 0.3)
-                config.gaussian_noise_prob = noise_settings.get("gaussian_noise_prob", 0.3)
-            
-            # Update blur transform settings
+                noise = settings["noise"]
+                aug_settings.noise_transforms_prob = noise.get("probability", 0.3)
+                aug_settings.gaussian_noise_prob = noise.get("gaussian_noise_prob", 0.3)
+                aug_settings.iso_noise_prob = noise.get("iso_noise_prob", 0.3)
+                aug_settings.jpeg_compression_prob = noise.get("jpeg_compression_prob", 0.3)
+                aug_settings.posterize_prob = noise.get("posterize_prob", 0.2)
+                aug_settings.equalize_prob = noise.get("equalize_prob", 0.2)
+                aug_settings.enabled_transforms["noise"] = noise.get("enabled", True)
             if "blur" in settings:
-                blur_settings = settings["blur"]
-                config.blur_transforms_prob = blur_settings.get("probability", 0.3)
-                config.blur_prob = blur_settings.get("blur_prob", 0.3)
+                blur = settings["blur"]
+                aug_settings.blur_transforms_prob = blur.get("probability", 0.3)
+                aug_settings.blur_prob = blur.get("blur_prob", 0.3)
+                aug_settings.gaussian_blur_prob = blur.get("gaussian_blur_prob", 0.3)
+                aug_settings.motion_blur_prob = blur.get("motion_blur_prob", 0.2)
+                aug_settings.median_blur_prob = blur.get("median_blur_prob", 0.2)
+                aug_settings.glass_blur_prob = blur.get("glass_blur_prob", 0.1)
+                aug_settings.enabled_transforms["blur"] = blur.get("enabled", True)
+
+            # Apply the updated settings to the image augmenter instance
+            self._apply_augmentation_settings_to_augmenter()
             
-            # Store enabled/disabled states for transform categories
-            self.image_augmenter.enabled_transforms = {
-                "geometric": settings.get("geometric", {}).get("enabled", True),
-                "color": settings.get("color", {}).get("enabled", True),
-                "weather": settings.get("weather", {}).get("enabled", True),
-                "noise": settings.get("noise", {}).get("enabled", True),
-                "blur": settings.get("blur", {}).get("enabled", True)
-            }
+            # Save the updated state
+            self.state_manager.save_state()
             
-            # Log the changes
-            print("Augmentation settings updated successfully")
+            print("Augmentation settings updated and saved successfully")
             
         except Exception as e:
             print(f"Error updating augmentation settings: {str(e)}")
             self.main_window.show_message("Error", f"Failed to update augmentation settings: {str(e)}", QMessageBox.Icon.Critical)
+
+    def _apply_augmentation_settings_to_augmenter(self):
+        """Helper to apply settings from AppData to the ImageAugmenter instance."""
+        if not self.app_data or not self.image_augmenter:
+            return
+            
+        # Get the settings from app_data
+        settings = self.app_data.augmentation_settings
+        config = self.image_augmenter.config
+        
+        # Apply all settings from the dataclass to the config object
+        config.geometric_transforms_prob = settings.geometric_transforms_prob
+        config.color_transforms_prob = settings.color_transforms_prob
+        config.weather_transforms_prob = settings.weather_transforms_prob
+        config.noise_transforms_prob = settings.noise_transforms_prob
+        config.blur_transforms_prob = settings.blur_transforms_prob
+        config.hflip_prob = settings.hflip_prob
+        config.vflip_prob = settings.vflip_prob
+        config.rotate_prob = settings.rotate_prob
+        config.rotate_limit = settings.rotate_limit
+        config.brightness_contrast_prob = settings.brightness_contrast_prob
+        config.hue_saturation_prob = settings.hue_saturation_prob
+        config.rgb_shift_prob = settings.rgb_shift_prob
+        config.blur_prob = settings.blur_prob
+        config.gaussian_noise_prob = settings.gaussian_noise_prob
+
+        # Apply the new settings
+        config.shift_scale_rotate_prob = settings.shift_scale_rotate_prob
+        config.elastic_transform_prob = settings.elastic_transform_prob
+        config.grid_distortion_prob = settings.grid_distortion_prob
+        config.optical_distortion_prob = settings.optical_distortion_prob
+        config.clahe_prob = settings.clahe_prob
+        config.channel_shuffle_prob = settings.channel_shuffle_prob
+        config.gamma_prob = settings.gamma_prob
+        config.fog_prob = settings.fog_prob
+        config.rain_prob = settings.rain_prob
+        config.sunflare_prob = settings.sunflare_prob
+        config.shadow_prob = settings.shadow_prob
+        config.iso_noise_prob = settings.iso_noise_prob
+        config.jpeg_compression_prob = settings.jpeg_compression_prob
+        config.posterize_prob = settings.posterize_prob
+        config.equalize_prob = settings.equalize_prob
+        config.gaussian_blur_prob = settings.gaussian_blur_prob
+        config.motion_blur_prob = settings.motion_blur_prob
+        config.median_blur_prob = settings.median_blur_prob
+        config.glass_blur_prob = settings.glass_blur_prob
+        
+        # Apply enabled states
+        self.image_augmenter.enabled_transforms = settings.enabled_transforms.copy()
+        print("Applied loaded augmentation settings to the augmenter.")
+
+    def get_augmentation_settings(self):
+        """Get the current augmentation settings as a dictionary."""
+        import dataclasses
+        return dataclasses.asdict(self.app_data.augmentation_settings)
 
     def _get_original_image_paths(self):
         """Returns list of original (non-augmented) image paths that exist on disk."""

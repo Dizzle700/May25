@@ -1,0 +1,31 @@
+{
+    "ip": "192.168.3.13",
+    "port": "2121",
+    "username": "user",
+    "password": "17407a8329cbeee199f1a59244cc7eb1:5ad03896ee97244475c91416b5270b780f447f28e546a70758e1886215468ec5",
+    "shared_folder": "C:/Users/Komp/Pictures/dataset",
+    "banner": "Welcome to PyFTPd Server!",
+    "user_permissions": {
+        "List (l,e)": true,
+        "Download (r)": true,
+        "Upload (w)": true,
+        "Append (a)": false,
+        "Delete (d)": false,
+        "Rename (f)": false,
+        "Make Dir (m)": false
+    },
+    "anonymous_enabled": true,
+    "anonymous_folder": "C:/\u041d\u043e\u0432\u0430\u044f \u043f\u0430\u043f\u043a\u0430",
+    "anonymous_permissions": {
+        "List (l,e)": true,
+        "Download (r)": true,
+        "Upload (w)": true,
+        "Append (a)": false,
+        "Delete (d)": false,
+        "Rename (f)": false,
+        "Make Dir (m)": false
+    },
+    "ftps_enabled": false,
+    "cert_file": "",
+    "key_file": ""
+}

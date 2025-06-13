@@ -769,7 +769,69 @@ class MainWindow(QMainWindow):
 
     def _show_augmentation_settings(self):
         """Show the augmentation settings dialog."""
+        if not self.app_logic:
+            return
+            
         dialog = AugmentationSettingsDialog(self)
+        
+        # Get current settings from app_logic and set them in the dialog
+        current_settings = self.app_logic.get_augmentation_settings()
+        
+        # The settings from app_logic are structured based on the AugmentationSettings dataclass.
+        # We need to convert this to the format expected by the dialog's set_settings method.
+        dialog_settings = {
+            "geometric": {
+                "enabled": current_settings["enabled_transforms"]["geometric"],
+                "probability": current_settings["geometric_transforms_prob"],
+                "hflip_prob": current_settings["hflip_prob"],
+                "vflip_prob": current_settings["vflip_prob"],
+                "rotate_prob": current_settings["rotate_prob"],
+                "rotate_limit": current_settings["rotate_limit"],
+                "shift_scale_rotate_prob": current_settings["shift_scale_rotate_prob"],
+                "elastic_transform_prob": current_settings["elastic_transform_prob"],
+                "grid_distortion_prob": current_settings["grid_distortion_prob"],
+                "optical_distortion_prob": current_settings["optical_distortion_prob"]
+            },
+            "color": {
+                "enabled": current_settings["enabled_transforms"]["color"],
+                "probability": current_settings["color_transforms_prob"],
+                "brightness_contrast_prob": current_settings["brightness_contrast_prob"],
+                "hue_saturation_prob": current_settings["hue_saturation_prob"],
+                "rgb_shift_prob": current_settings["rgb_shift_prob"],
+                "clahe_prob": current_settings["clahe_prob"],
+                "channel_shuffle_prob": current_settings["channel_shuffle_prob"],
+                "gamma_prob": current_settings["gamma_prob"]
+            },
+            "weather": {
+                "enabled": current_settings["enabled_transforms"]["weather"],
+                "probability": current_settings["weather_transforms_prob"],
+                "fog_prob": current_settings["fog_prob"],
+                "rain_prob": current_settings["rain_prob"],
+                "sunflare_prob": current_settings["sunflare_prob"],
+                "shadow_prob": current_settings["shadow_prob"]
+            },
+            "noise": {
+                "enabled": current_settings["enabled_transforms"]["noise"],
+                "probability": current_settings["noise_transforms_prob"],
+                "gaussian_noise_prob": current_settings["gaussian_noise_prob"],
+                "iso_noise_prob": current_settings["iso_noise_prob"],
+                "jpeg_compression_prob": current_settings["jpeg_compression_prob"],
+                "posterize_prob": current_settings["posterize_prob"],
+                "equalize_prob": current_settings["equalize_prob"]
+            },
+            "blur": {
+                "enabled": current_settings["enabled_transforms"]["blur"],
+                "probability": current_settings["blur_transforms_prob"],
+                "blur_prob": current_settings["blur_prob"],
+                "gaussian_blur_prob": current_settings["gaussian_blur_prob"],
+                "motion_blur_prob": current_settings["motion_blur_prob"],
+                "median_blur_prob": current_settings["median_blur_prob"],
+                "glass_blur_prob": current_settings["glass_blur_prob"]
+            }
+        }
+        
+        dialog.set_settings(dialog_settings)
+        
         dialog.settings_changed.connect(self._on_augmentation_settings_changed)
         dialog.exec()
         

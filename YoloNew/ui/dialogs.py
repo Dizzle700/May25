@@ -315,11 +315,11 @@ class AugmentationSettingsDialog(QDialog):
         form_layout = QFormLayout(group_box)
         
         # Blur
-        self.blur_effect_prob = QDoubleSpinBox()
-        self.blur_effect_prob.setRange(0.0, 1.0)
-        self.blur_effect_prob.setSingleStep(0.1)
-        self.blur_effect_prob.setDecimals(1)
-        form_layout.addRow("Blur Probability:", self.blur_effect_prob)
+        self.blur_individual_prob = QDoubleSpinBox()
+        self.blur_individual_prob.setRange(0.0, 1.0)
+        self.blur_individual_prob.setSingleStep(0.1)
+        self.blur_individual_prob.setDecimals(1)
+        form_layout.addRow("Blur Probability:", self.blur_individual_prob)
         
         # Add more transform controls as needed
         layout.addWidget(group_box)
@@ -359,7 +359,7 @@ class AugmentationSettingsDialog(QDialog):
         # Blur
         self.blur_enabled.setChecked(self.settings["blur"]["enabled"])
         self.blur_prob.setValue(self.settings["blur"]["probability"])
-        self.blur_effect_prob.setValue(self.settings["blur"]["blur_prob"])
+        self.blur_individual_prob.setValue(self.settings["blur"]["blur_prob"])
         
     def _save_settings(self):
         """Save UI control values to settings."""
@@ -393,7 +393,7 @@ class AugmentationSettingsDialog(QDialog):
         # Blur
         self.settings["blur"]["enabled"] = self.blur_enabled.isChecked()
         self.settings["blur"]["probability"] = self.blur_prob.value()
-        self.settings["blur"]["blur_prob"] = self.blur_effect_prob.value()
+        self.settings["blur"]["blur_prob"] = self.blur_individual_prob.value()
         
     def _apply_settings(self):
         """Apply the current settings."""
@@ -461,6 +461,11 @@ class AugmentationSettingsDialog(QDialog):
         """Get the current settings."""
         self._save_settings()
         return self.settings
+
+    def set_settings(self, settings: dict):
+        """Set the settings from an external source and update the UI."""
+        self.settings = settings
+        self._load_settings()
         
     def accept(self):
         """Handle dialog acceptance."""

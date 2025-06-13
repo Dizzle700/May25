@@ -29,6 +29,53 @@ class ImageAnnotation:
     _temp_image_data: Optional[np.ndarray] = field(default=None, repr=False) # Store augmented image data temporarily
 
 @dataclass
+class AugmentationSettings:
+    """Holds all settings related to image augmentation."""
+    geometric_transforms_prob: float = 0.5
+    color_transforms_prob: float = 0.5
+    weather_transforms_prob: float = 0.3
+    noise_transforms_prob: float = 0.3
+    blur_transforms_prob: float = 0.3
+    hflip_prob: float = 0.5
+    vflip_prob: float = 0.5
+    rotate_prob: float = 0.3
+    rotate_limit: int = 30
+    brightness_contrast_prob: float = 0.5
+    hue_saturation_prob: float = 0.3
+    rgb_shift_prob: float = 0.3
+    blur_prob: float = 0.3
+    gaussian_noise_prob: float = 0.3
+    
+    # Add the missing fields
+    shift_scale_rotate_prob: float = 0.3
+    elastic_transform_prob: float = 0.1
+    grid_distortion_prob: float = 0.1
+    optical_distortion_prob: float = 0.1
+    clahe_prob: float = 0.3
+    channel_shuffle_prob: float = 0.1
+    gamma_prob: float = 0.3
+    fog_prob: float = 0.3
+    rain_prob: float = 0.2
+    sunflare_prob: float = 0.1
+    shadow_prob: float = 0.2
+    iso_noise_prob: float = 0.3
+    jpeg_compression_prob: float = 0.3
+    posterize_prob: float = 0.2
+    equalize_prob: float = 0.2
+    gaussian_blur_prob: float = 0.3
+    motion_blur_prob: float = 0.2
+    median_blur_prob: float = 0.2
+    glass_blur_prob: float = 0.1
+
+    enabled_transforms: Dict[str, bool] = field(default_factory=lambda: {
+        "geometric": True,
+        "color": True,
+        "weather": True,
+        "noise": True,
+        "blur": True
+    })
+
+@dataclass
 class AppData:
     """Overall application data state."""
     images: Dict[str, ImageAnnotation] = field(default_factory=dict) # key: image_path
@@ -37,5 +84,6 @@ class AppData:
     confidence_threshold: float = 0.25
     resize_output_enabled: bool = False
     resize_output_resolution: str = "640x640"
+    augmentation_settings: AugmentationSettings = field(default_factory=AugmentationSettings)
     # Could add model management list here later
     # models: List[Dict[str,str]] = field(default_factory=list) # e.g. [{'name': 'yolov8n', 'path': '...'}, ...]

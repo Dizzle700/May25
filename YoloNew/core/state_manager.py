@@ -5,7 +5,8 @@ import time
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 
-from .models import AppData, ImageAnnotation, BoundingBox
+from .models import AppData, ImageAnnotation, BoundingBox, AugmentationSettings
+import dataclasses
 
 class StateManager:
     """
@@ -100,11 +101,15 @@ class StateManager:
             print(f"Error saving annotations: {e}")
             
     def _save_config(self):
-        """Save configuration data (classes, model path)"""
+        """Save configuration data (classes, model path, augmentation settings)"""
         try:
+            # Convert augmentation settings dataclass to a dictionary for JSON serialization
+            aug_settings_dict = dataclasses.asdict(self.app_data.augmentation_settings)
+
             config = {
                 "classes": self.app_data.classes,
-                "model_path": self.app_data.model_path
+                "model_path": self.app_data.model_path,
+                "augmentation_settings": aug_settings_dict
             }
             with open(self.config_file, 'w') as f:
                 json.dump(config, f, indent=2)
@@ -149,6 +154,13 @@ class StateManager:
                     config = json.load(f)
                     self.app_data.classes = config.get("classes", [])
                     self.app_data.model_path = config.get("model_path", None)
+                    
+                    # Load augmentation settings
+                    aug_settings_data = config.get("augmentation_settings")
+                    if aug_settings_data:
+                        # Create an AugmentationSettings instance from the loaded dictionary
+                        self.app_data.augmentation_settings = AugmentationSettings(**aug_settings_data)
+
             except Exception as e:
                 print(f"Error loading config: {e}")
                 success = False
@@ -175,4 +187,4 @@ class StateManager:
                 try:
                     os.remove(file_path)
                 except Exception as e:
-                    print(f"Error removing state file {file_path}: {e}") 
+                    print(f"Error removing state file {file_path}: {e}")

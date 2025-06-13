@@ -33,6 +33,27 @@ class AugmentationConfig:
         self.blur_prob = 0.3
         self.gaussian_noise_prob = 0.3
 
+        # Add the missing fields
+        self.shift_scale_rotate_prob = 0.3
+        self.elastic_transform_prob = 0.1
+        self.grid_distortion_prob = 0.1
+        self.optical_distortion_prob = 0.1
+        self.clahe_prob = 0.3
+        self.channel_shuffle_prob = 0.1
+        self.gamma_prob = 0.3
+        self.fog_prob = 0.3
+        self.rain_prob = 0.2
+        self.sunflare_prob = 0.1
+        self.shadow_prob = 0.2
+        self.iso_noise_prob = 0.3
+        self.jpeg_compression_prob = 0.3
+        self.posterize_prob = 0.2
+        self.equalize_prob = 0.2
+        self.gaussian_blur_prob = 0.3
+        self.motion_blur_prob = 0.2
+        self.median_blur_prob = 0.2
+        self.glass_blur_prob = 0.1
+
 class ImageAugmenter:
     """Handles image augmentation operations using Albumentations library."""
     def __init__(self):
@@ -87,10 +108,10 @@ class ImageAugmenter:
             
             # More advanced geometric transforms
             geometric_transforms.extend([
-                A.ShiftScaleRotate(shift_limit=0.1, scale_limit=0.1, rotate_limit=15, p=0.3),
-                A.ElasticTransform(alpha=1, sigma=50, alpha_affine=50, p=0.1),
-                A.GridDistortion(num_steps=5, distort_limit=0.3, p=0.1),
-                A.OpticalDistortion(distort_limit=0.2, shift_limit=0.15, p=0.1)
+                A.ShiftScaleRotate(shift_limit=0.1, scale_limit=0.1, rotate_limit=15, p=config.shift_scale_rotate_prob),
+                A.ElasticTransform(alpha=1, sigma=50, alpha_affine=50, p=config.elastic_transform_prob),
+                A.GridDistortion(num_steps=5, distort_limit=0.3, p=config.grid_distortion_prob),
+                A.OpticalDistortion(distort_limit=0.2, shift_limit=0.15, p=config.optical_distortion_prob)
             ])
             
             if geometric_transforms:
@@ -111,11 +132,11 @@ class ImageAugmenter:
             
             # More color transforms
             color_transforms.extend([
-                A.CLAHE(clip_limit=4.0, tile_grid_size=(8, 8), p=0.3),
-                A.RandomGamma(gamma_limit=(80, 120), p=0.3),
-                A.ChannelShuffle(p=0.1),
-                A.ToGray(p=0.1),
-                A.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1, p=0.3)
+                A.CLAHE(clip_limit=4.0, tile_grid_size=(8, 8), p=config.clahe_prob),
+                A.RandomGamma(gamma_limit=(80, 120), p=config.gamma_prob),
+                A.ChannelShuffle(p=config.channel_shuffle_prob),
+                A.ToGray(p=0.1), # ToGray does not have a probability, it's either on or off
+                A.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1, p=0.3) # This one is also hardcoded, but not in the dialog
             ])
             
             if color_transforms:
@@ -126,10 +147,10 @@ class ImageAugmenter:
         # Weather transforms
         if include_weather:
             weather_transforms = [
-                A.RandomFog(fog_coef_lower=0.1, fog_coef_upper=0.3, alpha_coef=0.1, p=0.3),
-                A.RandomRain(slant_lower=-10, slant_upper=10, drop_length=20, drop_width=1, drop_color=(200, 200, 200), p=0.2),
-                A.RandomSunFlare(flare_roi=(0, 0, 1, 0.5), angle_lower=0, angle_upper=1, num_flare_circles_lower=6, num_flare_circles_upper=10, p=0.1),
-                A.RandomShadow(shadow_roi=(0, 0.5, 1, 1), p=0.2)
+                A.RandomFog(fog_coef_lower=0.1, fog_coef_upper=0.3, alpha_coef=0.1, p=config.fog_prob),
+                A.RandomRain(slant_lower=-10, slant_upper=10, drop_length=20, drop_width=1, drop_color=(200, 200, 200), p=config.rain_prob),
+                A.RandomSunFlare(flare_roi=(0, 0, 1, 0.5), angle_lower=0, angle_upper=1, num_flare_circles_lower=6, num_flare_circles_upper=10, p=config.sunflare_prob),
+                A.RandomShadow(shadow_roi=(0, 0.5, 1, 1), p=config.shadow_prob)
             ]
             
             if weather_transforms:
@@ -146,10 +167,10 @@ class ImageAugmenter:
                 
             # More noise transforms
             noise_transforms.extend([
-                A.ISONoise(color_shift=(0.01, 0.05), intensity=(0.1, 0.5), p=0.3),
-                A.ImageCompression(quality_lower=70, quality_upper=90, p=0.3),
-                A.Posterize(num_bits=4, p=0.2),
-                A.Equalize(p=0.2)
+                A.ISONoise(color_shift=(0.01, 0.05), intensity=(0.1, 0.5), p=config.iso_noise_prob),
+                A.ImageCompression(quality_lower=70, quality_upper=90, p=config.jpeg_compression_prob),
+                A.Posterize(num_bits=4, p=config.posterize_prob),
+                A.Equalize(p=config.equalize_prob)
             ])
             
             if noise_transforms:
@@ -166,10 +187,10 @@ class ImageAugmenter:
                 
             # More blur transforms
             blur_transforms.extend([
-                A.GaussianBlur(blur_limit=7, p=0.3),
-                A.MotionBlur(blur_limit=7, p=0.2),
-                A.MedianBlur(blur_limit=7, p=0.2),
-                A.GlassBlur(sigma=0.7, max_delta=4, iterations=2, p=0.1)
+                A.GaussianBlur(blur_limit=7, p=config.gaussian_blur_prob),
+                A.MotionBlur(blur_limit=7, p=config.motion_blur_prob),
+                A.MedianBlur(blur_limit=7, p=config.median_blur_prob),
+                A.GlassBlur(sigma=0.7, max_delta=4, iterations=2, p=config.glass_blur_prob)
             ])
             
             if blur_transforms:
