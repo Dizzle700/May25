@@ -13,7 +13,18 @@ from PyQt6.QtWidgets import (
     QMessageBox, QComboBox, QListWidget, QListWidgetItem
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSettings
-from PyQt6.QtGui import QTextCursor, QPixmap
+from PyQt6.QtGui import QTextCursor, QPixmap, QMouseEvent # Added QMouseEvent
+
+# Custom QTextEdit for click functionality
+class ClickableTextEdit(QTextEdit):
+    clicked = pyqtSignal() # Custom signal for clicks
+
+    def mousePressEvent(self, event: QMouseEvent):
+        """Override mousePressEvent to emit a custom signal on click."""
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit()
+        super().mousePressEvent(event) # Call the base class implementation
+
 
 # --- Google Gemini Imports ---
 import google.generativeai as genai
@@ -385,9 +396,11 @@ class MainWindow(QMainWindow):
         self.image_display_label.setStyleSheet("border: 1px solid gray;") # Placeholder border
         center_panel_layout.addWidget(self.image_display_label, 3) # Stretch factor for image area
 
-        self.caption_display_text = QTextEdit("Caption for selected image will appear here.")
+        self.caption_display_text = ClickableTextEdit("Caption for selected image will appear here.")
         self.caption_display_text.setReadOnly(True)
         self.caption_display_text.setFixedHeight(100) # Example size
+        self.caption_display_text.setCursor(Qt.CursorShape.PointingHandCursor) # Indicate clickable
+        self.caption_display_text.clicked.connect(self._copyCaptionToClipboard) # Connect custom click signal
         center_panel_layout.addWidget(self.caption_display_text, 1) # Stretch factor for caption area
 
         top_panels_layout.addWidget(center_panel_widget, 2) # Stretch factor 2 for center panel
@@ -402,6 +415,10 @@ class MainWindow(QMainWindow):
         self.image_list_widget.setStyleSheet("border: 1px solid gray;") # Placeholder border
         self.image_list_widget.currentItemChanged.connect(self._onImageSelectionChanged) # Connect signal
         right_panel_layout.addWidget(self.image_list_widget)
+
+        self.clearImageListButton = QPushButton("Clear Image List")
+        self.clearImageListButton.clicked.connect(self._clearImageList)
+        right_panel_layout.addWidget(self.clearImageListButton)
 
         top_panels_layout.addWidget(right_panel_widget, 1) # Stretch factor 1 for right panel
 
@@ -560,6 +577,14 @@ class MainWindow(QMainWindow):
                 self._logMessage(f"No supported image files found in '{os.path.basename(directory_path)}'.")
         except Exception as e:
             self._logMessage(f"Error scanning directory '{directory_path}': {e}")
+
+    def _clearImageList(self):
+        """Clears the image list widget and resets related displays."""
+        self.image_list_widget.clear()
+        self.image_display_label.setText("Image Display Area")
+        self.image_display_label.setPixmap(QPixmap())
+        self.caption_display_text.setText("Caption for selected image will appear here.")
+        self._logMessage("Image list cleared.")
 
     def _onImageSelectionChanged(self, current_item, previous_item):
         """Handle selection change in the image list."""
@@ -764,6 +789,16 @@ class MainWindow(QMainWindow):
         self._updateControlsState(processing=False) # Re-enable controls
 
     def _copyPromptToClipboard(self):
+        """Copies the current prompt text to the clipboard."""
+        clipboard = QApplication.clipboard()
+        prompt_text = self.promptInput.toPlainText()
+        if prompt_text:
+            clipboard.setText(prompt_text)
+            self._logMessage("Prompt copied to clipboard.")
+        else:
+            self._logMessage("No prompt text to copy.")
+
+    def _copyCaptionToClipboard(self):
         """Copies the current active image's generated caption to the clipboard."""
         clipboard = QApplication.clipboard()
         caption_text = self.caption_display_text.toPlainText()
@@ -771,6 +806,7 @@ class MainWindow(QMainWindow):
         if caption_text and not caption_text.startswith("Caption for ") and not caption_text.startswith("Error:"):
             clipboard.setText(caption_text)
             self._logMessage("Generated caption copied to clipboard.")
+            # QMessageBox.information(self, "Caption Copied", "The caption has been copied to your clipboard!")
         else:
             self._logMessage("No generated caption to copy or placeholder text displayed.")
 

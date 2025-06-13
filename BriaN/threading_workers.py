@@ -66,9 +66,9 @@ class BackgroundRemovalWorker(QThread):
                 self.progress_updated.emit(i + 1, total_images)
 
             if self._is_running: # Not stopped prematurely
-                self.processing_finished.emit(f"Batch processing completed. {processed_count}/{total_images} images processed successfully.")
+                self.processing_finished.emit(f"completed {processed_count}/{total_images}")
             else:
-                self.processing_finished.emit(f"Batch processing stopped. {processed_count}/{total_images} images processed.")
+                self.processing_finished.emit(f"stopped {processed_count}/{total_images}")
 
         except Exception as e:
             self.status_updated.emit(f"Critical error during batch processing: {e}")
