@@ -312,3 +312,10 @@ def delete_credit_card(card_id: int):
     cursor.execute("DELETE FROM credit_cards WHERE id = ?", (card_id,))
     conn.commit()
     conn.close()
+
+def create_new_database_file(path: str):
+    """Creates a new, empty SQLite database file with the required tables."""
+    # This function is specifically for creating the file and schema.
+    # It does not set a master password.
+    set_database_path(path)
+    setup_database() # This will create the tables in the new file.    
