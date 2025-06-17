@@ -123,38 +123,17 @@ def extract_price_from_caption(caption_text):
     # Regex to find "цена" followed by optional colon/underscore/space and then numbers
     # It will capture the number part.
     # Allows for spaces around the number and optional decimal part.
-    price = None
-
-    # Attempt 1: Look for "цена" or "цена и наличие" followed by a number
-    match_cena = re.search(
-        r'\b(?:цена|цена и наличие)[_:\s]*([\d\s]+[.,]?\d*)\b',
-        caption_text,
-        re.IGNORECASE
-    )
-    if match_cena:
-        price_str = match_cena.group(1)
+    match = re.search(r'цена[_:\s]*(\d[\d\s]*[.,]?\d*)', caption_text, re.IGNORECASE)
+    if match:
+        price_str = match.group(1)
+        # Clean up the price string: remove spaces, replace comma with dot for float conversion
         price_str_cleaned = price_str.replace(" ", "").replace(",", ".")
         try:
             price = float(price_str_cleaned)
             return price
         except ValueError:
-            pass # Continue to next attempt if conversion fails
-
-    # Attempt 2: Look for any number followed by a currency symbol (тг, тенге, руб)
-    match_currency = re.search(
-        r'([\d\s]+[.,]?\d*)\s*(?:тг|тенге|руб\.?)\b',
-        caption_text,
-        re.IGNORECASE
-    )
-    if match_currency:
-        price_str = match_currency.group(1)
-        price_str_cleaned = price_str.replace(" ", "").replace(",", ".")
-        try:
-            price = float(price_str_cleaned)
-            return price
-        except ValueError:
-            pass # Return None if conversion fails
-
+            print(f"Warning: Could not convert extracted price '{price_str_cleaned}' to float.")
+            return None # Or return the string if preferred: price_str_cleaned
     return None
 
 # --- Downloader Logic (Worker) ---

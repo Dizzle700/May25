@@ -190,12 +190,27 @@ class AppLogic(QObject):
              return
 
         if not self.yolo_processor.is_model_loaded():
-             # Try loading model now if not already loaded
-             try:
-                 self.yolo_processor.load_model(self.app_data.model_path)
-             except Exception as e:
-                  self.main_window.show_message("Error", f"Failed to load model:\n{e}", QMessageBox.Icon.Critical)
-                  return
+            # Try loading model now if not already loaded
+            try:
+                model_class_names = self.yolo_processor.load_model(self.app_data.model_path)
+                
+                # --- Merge model classes with app classes ---
+                if model_class_names:
+                    newly_added_classes = []
+                    for name in model_class_names:
+                        if name not in self.app_data.classes:
+                            self.app_data.classes.append(name)
+                            newly_added_classes.append(name)
+                    
+                    if newly_added_classes:
+                        print(f"Auto-added {len(newly_added_classes)} classes from model: {newly_added_classes}")
+                        # Update UI with the new complete list
+                        self.main_window.update_class_list(self.app_data.classes)
+                        self.state_manager.save_state() # Save state after updating classes
+
+            except Exception as e:
+                self.main_window.show_message("Error", f"Failed to load model:\n{e}", QMessageBox.Icon.Critical)
+                return
 
         self.main_window.set_ui_busy(True, f"Running detection on {len(image_paths)} image(s)...")
 

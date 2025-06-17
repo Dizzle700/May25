@@ -1,0 +1,982 @@
+[
+  {
+    "id": "cat_maj_01",
+    "name": "Аудио и наушники",
+    "slug": "audio-i-naushniki",
+    "parent_id": null,
+    "type": "major"
+  },
+  {
+    "id": "cat_maj_02",
+    "name": "Переходники",
+    "slug": "perekhodniki",
+    "parent_id": null,
+    "type": "major"
+  },
+  {
+    "id": "cat_maj_03",
+    "name": "Кабели",
+    "slug": "kabeli",
+    "parent_id": null,
+    "type": "major"
+  },
+  {
+    "id": "cat_maj_04",
+    "name": "Зарядные устройства и питание",
+    "slug": "zaryadnye-ustroystva-i-pitanie",
+    "parent_id": null,
+    "type": "major"
+  },
+  {
+    "id": "cat_maj_05",
+    "name": "Аксессуары для авто",
+    "slug": "aksessuary-dlya-avto",
+    "parent_id": null,
+    "type": "major"
+  },
+  {
+    "id": "cat_maj_06",
+    "name": "Аксессуары для телефонов",
+    "slug": "aksessuary-dlya-telefonov",
+    "parent_id": null,
+    "type": "major"
+  },
+  {
+    "id": "cat_maj_07",
+    "name": "Умные устройства",
+    "slug": "umnye-ustroystva",
+    "parent_id": null,
+    "type": "major"
+  },
+  {
+    "id": "cat_maj_08",
+    "name": "Компьютерные аксессуары",
+    "slug": "kompyuternye-aksessuary",
+    "parent_id": null,
+    "type": "major"
+  },
+  {
+    "id": "cat_maj_09",
+    "name": "Хранение данных",
+    "slug": "khranenie-dannykh",
+    "parent_id": null,
+    "type": "major"
+  },
+  {
+    "id": "cat_maj_10",
+    "name": "Фото и видео",
+    "slug": "foto-i-video",
+    "parent_id": null,
+    "type": "major"
+  },
+  {
+    "id": "cat_maj_11",
+    "name": "Сетевое оборудование",
+    "slug": "setevoe-oborudovanie",
+    "parent_id": null,
+    "type": "major"
+  },
+  {
+    "id": "cat_maj_12",
+    "name": "Разное для дома",
+    "slug": "raznoe-dlya-doma",
+    "parent_id": null,
+    "type": "major"
+  },
+  {
+    "id": "cat_maj_13",
+    "name": "Игры и развлечения",
+    "slug": "igry-i-razvlecheniya",
+    "parent_id": null,
+    "type": "major"
+  },
+  {
+    "id": "cat_maj_14",
+    "name": "Личная гигиена и уход",
+    "slug": "lichnaya-gigiena-i-ukhod",
+    "parent_id": null,
+    "type": "major"
+  },
+  {
+    "id": "cat_maj_15",
+    "name": "Одежда и уход за ней",
+    "slug": "odezhda-i-ukhod-za-ney",
+    "parent_id": null,
+    "type": "major"
+  },
+  {
+    "id": "cat_sub_01",
+    "name": "наушники earphones",
+    "slug": "naushniki-earphones",
+    "parent_id": "cat_maj_01",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_02",
+    "name": "наушники headphones",
+    "slug": "naushniki-headphones",
+    "parent_id": "cat_maj_01",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_03",
+    "name": "наушники tws (airpods like)",
+    "slug": "naushniki-tws-airpods-like",
+    "parent_id": "cat_maj_01",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_04",
+    "name": "наушники neckband",
+    "slug": "naushniki-neckband",
+    "parent_id": "cat_maj_01",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_05",
+    "name": "гарнитура handsfree",
+    "slug": "garnitura-handsfree",
+    "parent_id": "cat_maj_01",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_06",
+    "name": "портативные колонки",
+    "slug": "portativnye-kolonki",
+    "parent_id": "cat_maj_01",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_07",
+    "name": "Портативные Bluetooth-колонки",
+    "slug": "portativnye-bluetooth-kolonki",
+    "parent_id": "cat_maj_01",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_08",
+    "name": "смарт колонки",
+    "slug": "smart-kolonki",
+    "parent_id": "cat_maj_01",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_09",
+    "name": "радио",
+    "slug": "radio",
+    "parent_id": "cat_maj_01",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_10",
+    "name": "Аудиоадаптеры (USB-C/Lightning на Jack 3.5)",
+    "slug": "audioadaptery-usb-clightning-na-jack-35",
+    "parent_id": "cat_maj_02",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_100",
+    "name": "Увлажнители и очистители воздуха",
+    "slug": "uvlazhniteli-i-ochistiteli-vozdukha",
+    "parent_id": "cat_maj_12",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_101",
+    "name": "Игровые геймпады",
+    "slug": "igrovye-geympady",
+    "parent_id": "cat_maj_13",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_102",
+    "name": "VR-очки",
+    "slug": "vr-ochki",
+    "parent_id": "cat_maj_13",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_103",
+    "name": "Мини-дроны",
+    "slug": "mini-drony",
+    "parent_id": "cat_maj_13",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_104",
+    "name": "Лазерные указки",
+    "slug": "lazernye-ukazki",
+    "parent_id": "cat_maj_13",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_105",
+    "name": "Обучающие планшеты/игрушки",
+    "slug": "obuchayushchie-planshetyigrushki",
+    "parent_id": "cat_maj_13",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_106",
+    "name": "Электрические зубные щетки",
+    "slug": "elektricheskie-zubnye-shchetki",
+    "parent_id": "cat_maj_14",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_107",
+    "name": "Машинки для стрижки волос / триммеры",
+    "slug": "mashinki-dlya-strizhki-volos-trimmery",
+    "parent_id": "cat_maj_14",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_108",
+    "name": "Электробритвы",
+    "slug": "elektrobritvy",
+    "parent_id": "cat_maj_14",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_109",
+    "name": "Пароочистители",
+    "slug": "paroochistiteli",
+    "parent_id": "cat_maj_15",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_11",
+    "name": "USB-адаптеры (USB-C → USB-A, USB-A → USB-C)",
+    "slug": "usb-adaptery-usb-c-usb-a-usb-a-usb-c",
+    "parent_id": "cat_maj_02",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_110",
+    "name": "Отпариватели для одежды",
+    "slug": "otparivateli-dlya-odezhdy",
+    "parent_id": "cat_maj_15",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_111",
+    "name": "Сушилки для обуви",
+    "slug": "sushilki-dlya-obuvi",
+    "parent_id": "cat_maj_15",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_112",
+    "name": "Машинки для удаления катышков",
+    "slug": "mashinki-dlya-udaleniya-katyshkov",
+    "parent_id": "cat_maj_15",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_113",
+    "name": "Мини-утюги дорожные",
+    "slug": "mini-utyugi-dorozhnye",
+    "parent_id": "cat_maj_15",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_114",
+    "name": "USB-разветвители для прикуривателя",
+    "slug": "usb-razvetviteli-dlya-prikurivatelya",
+    "parent_id": "cat_maj_15",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_115",
+    "name": "OTG-кабели и переходники",
+    "slug": "otg-kabeli-i-perekhodniki",
+    "parent_id": "cat_maj_15",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_116",
+    "name": "HDMI кабели и переходники",
+    "slug": "hdmi-kabeli-i-perekhodniki",
+    "parent_id": "cat_maj_15",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_117",
+    "name": "Android TV box (приставки Smart TV)",
+    "slug": "android-tv-box-pristavki-smart-tv",
+    "parent_id": "cat_maj_15",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_118",
+    "name": "Защитные пленки/накладки на клавиатуру",
+    "slug": "zashchitnye-plenkinakladki-na-klaviaturu",
+    "parent_id": "cat_maj_15",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_119",
+    "name": "Ультразвуковые очистители (например, для украшений или очков)",
+    "slug": "ultrazvukovye-ochistiteli-naprimer-dlya-ukrasheniy-ili-ochkov",
+    "parent_id": "cat_maj_15",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_12",
+    "name": "Видеоадаптеры (USB-C → HDMI, USB-C → VGA, USB-C → DisplayPort)",
+    "slug": "videoadaptery-usb-c-hdmi-usb-c-vga-usb-c-displayport",
+    "parent_id": "cat_maj_02",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_120",
+    "name": "Электронные записные книжки/планшеты для заметок",
+    "slug": "elektronnye-zapisnye-knizhkiplanshety-dlya-zametok",
+    "parent_id": "cat_maj_15",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_121",
+    "name": "Электронные ручки/перья",
+    "slug": "elektronnye-ruchkiperya",
+    "parent_id": "cat_maj_15",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_122",
+    "name": "Массажёры (для лица, шеи, тела)",
+    "slug": "massazhyory-dlya-litsa-shei-tela",
+    "parent_id": "cat_maj_15",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_123",
+    "name": "Линзы для камер смартфона",
+    "slug": "linzy-dlya-kamer-smartfona",
+    "parent_id": "cat_maj_15",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_124",
+    "name": "GPS часы для детей",
+    "slug": "gps-chasy-dlya-detey",
+    "parent_id": "cat_maj_15",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_125",
+    "name": "Детские планшеты",
+    "slug": "detskie-planshety",
+    "parent_id": "cat_maj_15",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_13",
+    "name": "OTG-переходники (USB-C/Micro-USB для подключения периферии)",
+    "slug": "otg-perekhodniki-usb-cmicro-usb-dlya-podklyucheniya-periferii",
+    "parent_id": "cat_maj_02",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_14",
+    "name": "Универсальные переходники для розеток (международные адаптеры)",
+    "slug": "universalnye-perekhodniki-dlya-rozetok-mezhdunarodnye-adaptery",
+    "parent_id": "cat_maj_02",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_15",
+    "name": "Адаптеры для SSD и HDD (SATA → USB, M.2 → USB)",
+    "slug": "adaptery-dlya-ssd-i-hdd-sata-usb-m2-usb",
+    "parent_id": "cat_maj_02",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_16",
+    "name": "Аудиоадаптеры для стриминга (например, для петличных микрофонов)",
+    "slug": "audioadaptery-dlya-striminga-naprimer-dlya-petlichnykh-mikrofonov",
+    "parent_id": "cat_maj_02",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_17",
+    "name": "Переходники для сетевых кабелей (Ethernet → USB)",
+    "slug": "perekhodniki-dlya-setevykh-kabeley-ethernet-usb",
+    "parent_id": "cat_maj_02",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_18",
+    "name": "Адаптеры для карт памяти (SD → USB-C, MicroSD → USB)",
+    "slug": "adaptery-dlya-kart-pamyati-sd-usb-c-microsd-usb",
+    "parent_id": "cat_maj_02",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_19",
+    "name": "Мультипортовые адаптеры (USB-C хабы с HDMI/Ethernet/USB)",
+    "slug": "multiportovye-adaptery-usb-c-khaby-s-hdmiethernetusb",
+    "parent_id": "cat_maj_02",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_20",
+    "name": "Кабели зарядки (typec, micro, iphone)",
+    "slug": "kabeli-zaryadki-typec-micro-iphone",
+    "parent_id": "cat_maj_03",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_21",
+    "name": "Кабели видео (hdmi, displayport, vga)",
+    "slug": "kabeli-video-hdmi-displayport-vga",
+    "parent_id": "cat_maj_03",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_22",
+    "name": "Кабели аудио (Aux, Rca, coaxial)",
+    "slug": "kabeli-audio-aux-rca-coaxial",
+    "parent_id": "cat_maj_03",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_23",
+    "name": "Сетевые кабели",
+    "slug": "setevye-kabeli",
+    "parent_id": "cat_maj_03",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_24",
+    "name": "Кабели Питания",
+    "slug": "kabeli-pitaniya",
+    "parent_id": "cat_maj_03",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_25",
+    "name": "Кабели для принтеров",
+    "slug": "kabeli-dlya-printerov",
+    "parent_id": "cat_maj_03",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_26",
+    "name": "Кабели для внешних жестких дисков (SATA → USB)",
+    "slug": "kabeli-dlya-vneshnikh-zhestkikh-diskov-sata-usb",
+    "parent_id": "cat_maj_03",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_27",
+    "name": "зарядное устройство",
+    "slug": "zaryadnoe-ustroystvo",
+    "parent_id": "cat_maj_04",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_28",
+    "name": "Power Bank (внешние аккумуляторы)",
+    "slug": "power-bank-vneshnie-akkumulyatory",
+    "parent_id": "cat_maj_04",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_29",
+    "name": "Беспроводные зарядки (QI)",
+    "slug": "besprovodnye-zaryadki-qi",
+    "parent_id": "cat_maj_04",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_30",
+    "name": "Bluetooth-адаптеры",
+    "slug": "bluetooth-adaptery",
+    "parent_id": "cat_maj_04",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_31",
+    "name": "Батарейки и аккумуляторы",
+    "slug": "batareyki-i-akkumulyatory",
+    "parent_id": "cat_maj_04",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_32",
+    "name": "Зарядные устройства для аккумуляторов",
+    "slug": "zaryadnye-ustroystva-dlya-akkumulyatorov",
+    "parent_id": "cat_maj_04",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_33",
+    "name": "Универсальные переходники для розеток",
+    "slug": "universalnye-perekhodniki-dlya-rozetok",
+    "parent_id": "cat_maj_04",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_34",
+    "name": "Ночник с зарядкой/динамиком",
+    "slug": "nochnik-s-zaryadkoydinamikom",
+    "parent_id": "cat_maj_04",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_35",
+    "name": "Адаптеры USB-C → HDMI/VGA",
+    "slug": "adaptery-usb-c-hdmivga",
+    "parent_id": "cat_maj_04",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_36",
+    "name": "Адаптеры для SSD и HDD",
+    "slug": "adaptery-dlya-ssd-i-hdd",
+    "parent_id": "cat_maj_04",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_37",
+    "name": "Солнечные лампы",
+    "slug": "solnechnye-lampy",
+    "parent_id": "cat_maj_04",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_38",
+    "name": "Эко-батарейки/аккумуляторы",
+    "slug": "eko-batareykiakkumulyatory",
+    "parent_id": "cat_maj_04",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_39",
+    "name": "автомобильные зарядные блоки",
+    "slug": "avtomobilnye-zaryadnye-bloki",
+    "parent_id": "cat_maj_05",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_40",
+    "name": "автомобильные зарядные устройства",
+    "slug": "avtomobilnye-zaryadnye-ustroystva",
+    "parent_id": "cat_maj_05",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_41",
+    "name": "автомобильные аксессуары",
+    "slug": "avtomobilnye-aksessuary",
+    "parent_id": "cat_maj_05",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_42",
+    "name": "FM-трансмиттеры",
+    "slug": "fm-transmittery",
+    "parent_id": "cat_maj_05",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_43",
+    "name": "Видеорегистраторы",
+    "slug": "videoregistratory",
+    "parent_id": "cat_maj_05",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_44",
+    "name": "Парктроники",
+    "slug": "parktroniki",
+    "parent_id": "cat_maj_05",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_45",
+    "name": "Автомобильные пылесосы",
+    "slug": "avtomobilnye-pylesosy",
+    "parent_id": "cat_maj_05",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_46",
+    "name": "Ручные пылесосы",
+    "slug": "ruchnye-pylesosy",
+    "parent_id": "cat_maj_05",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_47",
+    "name": "чехлы для телефонов",
+    "slug": "chekhly-dlya-telefonov",
+    "parent_id": "cat_maj_06",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_48",
+    "name": "влагозащитные чехлы и сумки",
+    "slug": "vlagozashchitnye-chekhly-i-sumki",
+    "parent_id": "cat_maj_06",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_49",
+    "name": "сумки для ноутбуков",
+    "slug": "sumki-dlya-noutbukov",
+    "parent_id": "cat_maj_06",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_50",
+    "name": "Внешние микрофоны для смартфонов",
+    "slug": "vneshnie-mikrofony-dlya-smartfonov",
+    "parent_id": "cat_maj_06",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_51",
+    "name": "Защитные стекла и пленки",
+    "slug": "zashchitnye-stekla-i-plenki",
+    "parent_id": "cat_maj_06",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_52",
+    "name": "Держатели для телефона",
+    "slug": "derzhateli-dlya-telefona",
+    "parent_id": "cat_maj_06",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_53",
+    "name": "Попсокеты и кольца",
+    "slug": "popsokety-i-koltsa",
+    "parent_id": "cat_maj_06",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_54",
+    "name": "Стилусы",
+    "slug": "stilusy",
+    "parent_id": "cat_maj_06",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_55",
+    "name": "Подставки под телефон",
+    "slug": "podstavki-pod-telefon",
+    "parent_id": "cat_maj_06",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_56",
+    "name": "Аккумуляторные чехлы",
+    "slug": "akkumulyatornye-chekhly",
+    "parent_id": "cat_maj_06",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_57",
+    "name": "Органайзеры для проводов",
+    "slug": "organayzery-dlya-provodov",
+    "parent_id": "cat_maj_06",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_58",
+    "name": "Сумки и чехлы для гаджетов",
+    "slug": "sumki-i-chekhly-dlya-gadzhetov",
+    "parent_id": "cat_maj_06",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_59",
+    "name": "Подставки и охлаждающие подставки для ноутбуков",
+    "slug": "podstavki-i-okhlazhdayushchie-podstavki-dlya-noutbukov",
+    "parent_id": "cat_maj_06",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_60",
+    "name": "Умные часы (Smart Watch)",
+    "slug": "umnye-chasy-smart-watch",
+    "parent_id": "cat_maj_07",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_61",
+    "name": "Фитнес-браслеты",
+    "slug": "fitnes-braslety",
+    "parent_id": "cat_maj_07",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_62",
+    "name": "Ремешки для смарт-часов",
+    "slug": "remeshki-dlya-smart-chasov",
+    "parent_id": "cat_maj_07",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_63",
+    "name": "GPS-трекеры",
+    "slug": "gps-trekery",
+    "parent_id": "cat_maj_07",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_64",
+    "name": "Смарт-розетки",
+    "slug": "smart-rozetki",
+    "parent_id": "cat_maj_07",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_65",
+    "name": "Умные камеры наблюдения",
+    "slug": "umnye-kamery-nablyudeniya",
+    "parent_id": "cat_maj_07",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_66",
+    "name": "Датчики движения / дыма",
+    "slug": "datchiki-dvizheniya-dyma",
+    "parent_id": "cat_maj_07",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_67",
+    "name": "Умные термометры / гигрометры",
+    "slug": "umnye-termometry-gigrometry",
+    "parent_id": "cat_maj_07",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_68",
+    "name": "Смарт-термокружки/термосы",
+    "slug": "smart-termokruzhkitermosy",
+    "parent_id": "cat_maj_07",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_69",
+    "name": "GPS-маячки",
+    "slug": "gps-mayachki",
+    "parent_id": "cat_maj_07",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_70",
+    "name": "Детские смарт-часы с GPS",
+    "slug": "detskie-smart-chasy-s-gps",
+    "parent_id": "cat_maj_07",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_71",
+    "name": "компьютерные мыши",
+    "slug": "kompyuternye-myshi",
+    "parent_id": "cat_maj_08",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_72",
+    "name": "клавиатуры",
+    "slug": "klaviatury",
+    "parent_id": "cat_maj_08",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_73",
+    "name": "Коврики для мыши",
+    "slug": "kovriki-dlya-myshi",
+    "parent_id": "cat_maj_08",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_74",
+    "name": "Мыши",
+    "slug": "myshi",
+    "parent_id": "cat_maj_08",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_75",
+    "name": "USB-хабы",
+    "slug": "usb-khaby",
+    "parent_id": "cat_maj_08",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_76",
+    "name": "Wifi адаптеры",
+    "slug": "wifi-adaptery",
+    "parent_id": "cat_maj_08",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_77",
+    "name": "Bluetooth-адаптеры",
+    "slug": "bluetooth-adaptery",
+    "parent_id": "cat_maj_08",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_78",
+    "name": "Веб-камеры",
+    "slug": "veb-kamery",
+    "parent_id": "cat_maj_08",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_79",
+    "name": "USB-концентраторы с Ethernet/HDMI",
+    "slug": "usb-kontsentratory-s-ethernethdmi",
+    "parent_id": "cat_maj_08",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_80",
+    "name": "Карты памяти и кардридеры",
+    "slug": "karty-pamyati-i-kardridery",
+    "parent_id": "cat_maj_09",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_81",
+    "name": "Флешки (USB-накопители)",
+    "slug": "fleshki-usb-nakopiteli",
+    "parent_id": "cat_maj_09",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_82",
+    "name": "Карты памяти Microsd",
+    "slug": "karty-pamyati-microsd",
+    "parent_id": "cat_maj_09",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_83",
+    "name": "Внешние SSD и HDD",
+    "slug": "vneshnie-ssd-i-hdd",
+    "parent_id": "cat_maj_09",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_84",
+    "name": "Кардридеры",
+    "slug": "kardridery",
+    "parent_id": "cat_maj_09",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_85",
+    "name": "USB OTG накопители",
+    "slug": "usb-otg-nakopiteli",
+    "parent_id": "cat_maj_09",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_86",
+    "name": "Штативы и моноподы",
+    "slug": "shtativy-i-monopody",
+    "parent_id": "cat_maj_10",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_87",
+    "name": "Селфи-палки",
+    "slug": "selfi-palki",
+    "parent_id": "cat_maj_10",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_88",
+    "name": "Кольцевые лампы и вспышки",
+    "slug": "koltsevye-lampy-i-vspyshki",
+    "parent_id": "cat_maj_10",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_89",
+    "name": "Крепления для экшн-камер",
+    "slug": "krepleniya-dlya-ekshn-kamer",
+    "parent_id": "cat_maj_10",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_90",
+    "name": "USB-лампы",
+    "slug": "usb-lampy",
+    "parent_id": "cat_maj_10",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_91",
+    "name": "Wi-Fi роутеры",
+    "slug": "wi-fi-routery",
+    "parent_id": "cat_maj_11",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_92",
+    "name": "Повторители сигнала (репитеры)",
+    "slug": "povtoriteli-signala-repitery",
+    "parent_id": "cat_maj_11",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_93",
+    "name": "USB-модемы",
+    "slug": "usb-modemy",
+    "parent_id": "cat_maj_11",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_94",
+    "name": "Светильники",
+    "slug": "svetilniki",
+    "parent_id": "cat_maj_12",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_95",
+    "name": "Электронные весы",
+    "slug": "elektronnye-vesy",
+    "parent_id": "cat_maj_12",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_96",
+    "name": "Увлажнители воздуха",
+    "slug": "uvlazhniteli-vozdukha",
+    "parent_id": "cat_maj_12",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_97",
+    "name": "Портативные вентиляторы",
+    "slug": "portativnye-ventilyatory",
+    "parent_id": "cat_maj_12",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_98",
+    "name": "Светодиодные ленты",
+    "slug": "svetodiodnye-lenty",
+    "parent_id": "cat_maj_12",
+    "type": "sub"
+  },
+  {
+    "id": "cat_sub_99",
+    "name": "Электронные кухонные весы",
+    "slug": "elektronnye-kukhonnye-vesy",
+    "parent_id": "cat_maj_12",
+    "type": "sub"
+  }
+]

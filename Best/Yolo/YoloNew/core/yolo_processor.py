@@ -13,19 +13,27 @@ class YoloProcessor:
     def __init__(self):
         self.model: Optional[YOLO] = None
 
-    def load_model(self, model_path: str):
-        """Loads a YOLO model from the given path."""
+    def load_model(self, model_path: str) -> List[str]:
+        """
+        Loads a YOLO model from the given path and returns its class names.
+        """
         try:
-            # device='cpu' or device=0 for GPU etc. can be added
-            # Ultralytics YOLO automatically selects device if possible
             self.model = YOLO(model_path)
-            # You might want to run a dummy inference to fully initialize
-            # self.model(np.zeros((640, 640, 3), dtype=np.uint8))
             print(f"Successfully loaded model: {model_path}")
+
+            # Extract class names from the model
+            # model.names is a dictionary like {0: 'class_a', 1: 'class_b', ...}
+            if self.model.names:
+                # Return the list of class names in order of their IDs
+                return [self.model.names[i] for i in sorted(self.model.names.keys())]
+            else:
+                print("Warning: Model does not contain class names.")
+                return []
+                
         except Exception as e:
             self.model = None
             print(f"Error loading YOLO model from {model_path}: {e}")
-            raise # Re-raise exception to be caught by AppLogic
+            raise  # Re-raise exception to be caught by AppLogic
 
     def is_model_loaded(self) -> bool:
         """Checks if a model is currently loaded."""

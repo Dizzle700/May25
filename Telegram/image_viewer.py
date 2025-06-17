@@ -14,6 +14,7 @@ try:
     from . import database_handler # For running as part of a package
 except ImportError:
     import database_handler # For running script directly or if sys.path is set up
+    import gemini_categorizer # Import gemini_categorizer for loading categories
 
 class ImageViewerWindow(QDialog):
     def __init__(self, db_path, parent=None): # Added db_path argument
@@ -21,23 +22,15 @@ class ImageViewerWindow(QDialog):
         self.setWindowTitle("Telegram Image Viewer")
         self.setGeometry(150, 150, 1000, 700) # Initial size, can be adjusted
         
-        if not db_path or not os.path.exists(db_path):
-            # Fallback or error handling if db_path is invalid
-            # For now, let's try to use a default if possible, or raise error
-            # This situation should ideally be prevented by the calling code (MainWindow)
-            print(f"Warning: Invalid db_path '{db_path}' provided to ImageViewerWindow.")
-            # Attempt to use a default path if database_handler still has one (it shouldn't after changes)
-            # Or, more robustly, disable functionality or show an error message in the UI.
-            # For this example, we'll assume db_path is valid as MainWindow should ensure it.
-            # If database_handler.DATABASE_PATH was removed, this line below would error.
-            # self.db_path = getattr(database_handler, 'DATABASE_PATH', 'default_viewer_db.sqlite')
-            # A better approach if db_path is critical:
-            if not db_path:
-                 raise ValueError("ImageViewerWindow requires a valid database path.")
-            # If path doesn't exist, it might be an issue, but load_image_list will handle empty DB.
+        if not db_path:
+            raise ValueError("ImageViewerWindow requires a valid database path.")
             
         self.db_path = db_path # Use the provided db_path
         self.current_selected_image_id = None # To store the ID of the selected image
+
+        # Load categories for display
+        self.categories_data = gemini_categorizer.load_categories()
+        self.id_to_category_map = self.categories_data[1] # Access the id_to_category_map
 
         self.init_ui()
         # self.load_image_list() # Will be called in showEvent
@@ -207,9 +200,36 @@ class ImageViewerWindow(QDialog):
 
             # Display metadata - only specific fields
             info_text = []
+            
+            # Get category names from IDs
+            major_cat_id = img_data['major_category_id']
+            sub_cat_id = img_data['sub_category_id']
+            
+            major_cat_name = "N/A"
+            sub_cat_name = "N/A"
+
+            if major_cat_id and major_cat_id in self.id_to_category_map:
+                major_cat_name = self.id_to_category_map[major_cat_id]['name']
+            
+            if sub_cat_id and sub_cat_id in self.id_to_category_map:
+                sub_cat_name = self.id_to_category_map[sub_cat_id]['name']
+
+            # Construct the display string for category
+            display_category = ""
+            if major_cat_name != "N/A":
+                display_category = major_cat_name
+                if sub_cat_name != "N/A":
+                    display_category += f" > {sub_cat_name}"
+            else:
+                display_category = "не определена" # Fallback if no major category
+
+            info_text.append(f"<b>Major Category ID:</b> {major_cat_id if major_cat_id else 'N/A'}")
+            info_text.append(f"<b>Sub Category ID:</b> {sub_cat_id if sub_cat_id else 'N/A'}")
+            info_text.append(f"<b>AI Category:</b> {display_category}")
+            
+            # Add other fields
             fields_to_display = {
                 "sanitized_caption": "Sanitized Caption",
-                "ai_category": "AI Category",
                 "price": "Price",
                 "channel": "Channel",
                 "telegram_message_date": "Message Date (UTC)"

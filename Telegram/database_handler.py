@@ -33,16 +33,18 @@ def initialize_database(db_path):
             utc_timestamp TEXT, -- ISO format datetime YYYY-MM-DD HH:MM:SS
             message_group INTEGER, -- To group images from the same message if multiple
             telegram_message_date TEXT, -- Store the original message date from Telegram (UTC)
-            ai_category TEXT, -- Category suggested by AI
+            major_category_id TEXT, -- ID of the major category
+            sub_category_id TEXT, -- ID of the sub category
             sanitized_caption TEXT, -- Caption cleaned of emojis and extra whitespace
-            price REAL -- Extracted price from caption
+            price TEXT -- Extracted prices as JSON string
         )
     """)
     # Attempt to add columns if they don't exist (for existing databases)
     columns_to_add = {
-        "ai_category": "TEXT",
+        "major_category_id": "TEXT",
+        "sub_category_id": "TEXT",
         "sanitized_caption": "TEXT",
-        "price": "REAL"
+        "price": "TEXT"
     }
     for column_name, column_type in columns_to_add.items():
         try:
@@ -71,12 +73,12 @@ def insert_image_metadata(metadata, db_path):
                 message_id, channel, image_number_in_message, caption, 
                 filename, full_path, download_date, download_time, 
                 original_filename, utc_timestamp, message_group, telegram_message_date, 
-                ai_category, sanitized_caption, price
+                major_category_id, sub_category_id, sanitized_caption, price
             ) VALUES (
                 :message_id, :channel, :image_number_in_message, :caption,
                 :filename, :full_path, :download_date, :download_time,
                 :original_filename, :utc_timestamp, :message_group, :telegram_message_date, 
-                :ai_category, :sanitized_caption, :price
+                :major_category_id, :sub_category_id, :sanitized_caption, :price
             )
         """, metadata)
         conn.commit()
@@ -92,6 +94,18 @@ def insert_image_metadata(metadata, db_path):
         # Potentially re-raise or log more formally
     finally:
         conn.close()
+
+def get_image_metadata(image_id, db_path):
+    """
+    Retrieves all metadata for a single image by its ID.
+    """
+    conn = get_db_connection(db_path)
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM images WHERE id = ?", (image_id,))
+    img_data = cursor.fetchone()
+    conn.close()
+    return img_data
+
 
 if __name__ == '__main__':
     # This block is for direct script execution, e.g., for testing.

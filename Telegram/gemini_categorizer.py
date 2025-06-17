@@ -2,10 +2,12 @@ import configparser
 import os
 import google.generativeai as genai
 from PIL import Image # For image processing
+import json # Added for JSON parsing
 
 # --- Configuration ---
 CONFIG_FILE_PATH = os.path.join(os.path.dirname(__file__), "config.ini")
-DEFAULT_CATEGORIES_FILE = os.path.join(os.path.dirname(__file__), "categories.txt")
+# Changed to categories.json
+DEFAULT_CATEGORIES_FILE = os.path.join(os.path.dirname(__file__), "categories.json")
 
 def get_gemini_api_key():
     """Reads the Gemini API key from the config file."""
@@ -20,74 +22,81 @@ def get_gemini_api_key():
         print("Error: GEMINI_API_KEY not found in config.ini under [Gemini] section.")
         return None
 
+def _build_category_maps(categories_data):
+    """
+    Builds lookup maps from the flat categories JSON data.
+    Returns:
+        tuple: (id_to_category_map, name_to_id_map, slug_to_id_map)
+    """
+    id_to_category_map = {item['id']: item for item in categories_data}
+    name_to_id_map = {item['name'].lower(): item['id'] for item in categories_data}
+    slug_to_id_map = {item['slug'].lower(): item['id'] for item in categories_data}
+    return id_to_category_map, name_to_id_map, slug_to_id_map
+
 def load_categories(categories_file_path=DEFAULT_CATEGORIES_FILE):
-    """Loads categories from a text file, one category per line."""
-    categories = []
+    """
+    Loads categories from a JSON file and returns structured data and lookup maps.
+    Returns:
+        tuple: (raw_categories_list, id_to_category_map, name_to_id_map, slug_to_id_map)
+    """
+    categories_data = []
     try:
         with open(categories_file_path, 'r', encoding='utf-8') as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith('#') and \
-                   not (line.startswith("'") or line.startswith('"')):
-                    categories.append(line)
+            categories_data = json.load(f)
     except FileNotFoundError:
-        print(f"Warning: Categories file not found at {categories_file_path}. Returning empty list.")
-        return []
+        print(f"Warning: Categories JSON file not found at {categories_file_path}. Returning empty data.")
+        return [], {}, {}, {}
+    except json.JSONDecodeError as e:
+        print(f"Error decoding categories JSON from {categories_file_path}: {e}. Returning empty data.")
+        return [], {}, {}, {}
     except Exception as e:
-        print(f"Error loading categories from {categories_file_path}: {e}")
-        return []
-    if not categories:
-        print(f"Warning: No categories loaded from {categories_file_path}. Ensure the file is not empty and has valid entries.")
-    return categories
+        print(f"Error loading categories from {categories_file_path}: {e}. Returning empty data.")
+        return [], {}, {}, {}
+    
+    if not categories_data:
+        print(f"Warning: No categories loaded from {categories_file_path}. Ensure the file is not empty and has valid JSON entries.")
+        return [], {}, {}, {}
+    
+    id_to_category_map, name_to_id_map, slug_to_id_map = _build_category_maps(categories_data)
+    return categories_data, id_to_category_map, name_to_id_map, slug_to_id_map
 
-def get_category_from_gemini(image_path, text_to_categorize, categories_list, api_key):
+def get_category_from_gemini(image_path, text_to_categorize, categories_data, api_key):
     """
     Uses Gemini AI to categorize the given image and text based on the provided categories list.
 
     Args:
         image_path (str): Path to the image file.
         text_to_categorize (str): The text (e.g., product caption) to categorize.
-        categories_list (list): A list of category strings.
+        categories_data (tuple): Structured category data from load_categories.
         api_key (str): The Gemini API key.
 
     Returns:
-        str: The suggested category name from the list, or 'не определена' / error message.
+        tuple: (major_category_id, sub_category_id) or (None, None) on failure/not found.
     """
-    if not api_key or api_key == "YOUR_GEMINI_API_KEY":
-        return "не настроен API ключ"
+    raw_categories_list, id_to_category_map, name_to_id_map, slug_to_id_map = categories_data
 
-    if not categories_list:
-        return "нет списка категорий"
+    if not api_key or api_key == "YOUR_GEMINI_API_KEY":
+        return None, None # "не настроен API ключ"
+
+    if not raw_categories_list:
+        return None, None # "нет списка категорий"
 
     if not image_path or not os.path.exists(image_path):
-        print(f"Warning: Image path invalid or file does not exist: {image_path}. Attempting text-only categorization.")
-        # Fallback to text-only if image is missing, or return specific error
-        # For now, let's make image mandatory for this function version
-        return "файл изображения не найден"
-
-
-    # Text is optional but helpful if present
-    # if not text_to_categorize or len(text_to_categorize.strip()) < 3:
-    #     text_to_categorize = "Проанализируй только изображение."
-
+        print(f"Warning: Image path invalid or file does not exist: {image_path}. Skipping AI categorization.")
+        return None, None # "файл изображения не найден"
 
     try:
         genai.configure(api_key=api_key)
         
         img = Image.open(image_path)
 
-        # Using gemini-1.5-pro-latest for multimodal capabilities
-        # Note: Ensure the user's API key has access to this model.
-        # gemini-pro-vision was the older model name for vision.
-        # gemini-1.5-flash-latest is text only.
-        # gemini-1.5-pro-latest is the current advanced multimodal model.
         model_name_to_use = "gemini-1.5-pro-latest" 
         
         generation_config = {
             "temperature": 0.2, 
             "top_p": 1,
-            "top_k": 32, # Allow for a bit more flexibility with multimodal
-            "max_output_tokens": 50,
+            "top_k": 32,
+            "max_output_tokens": 100, # Increased token limit for two categories
         }
         safety_settings = [
             {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
@@ -99,65 +108,90 @@ def get_category_from_gemini(image_path, text_to_categorize, categories_list, ap
                                       generation_config=generation_config,
                                       safety_settings=safety_settings)
 
-        categories_str = ", ".join(categories_list)
+        # Prepare categories for the prompt
+        major_categories = sorted(list(set([item['name'] for item in raw_categories_list if item['type'] == 'major'])))
+        sub_categories_by_major = {}
+        for item in raw_categories_list:
+            if item['type'] == 'sub' and item['parent_id']:
+                parent_cat = id_to_category_map.get(item['parent_id'])
+                if parent_cat:
+                    major_name = parent_cat['name']
+                    if major_name not in sub_categories_by_major:
+                        sub_categories_by_major[major_name] = []
+                    sub_categories_by_major[major_name].append(item['name'])
+        
+        categories_prompt_parts = []
+        for major_cat in major_categories:
+            sub_cats = sub_categories_by_major.get(major_cat, [])
+            if sub_cats:
+                categories_prompt_parts.append(f"{major_cat}: {', '.join(sorted(sub_cats))}")
+            else:
+                categories_prompt_parts.append(major_cat) # Major category with no sub-categories
+
+        categories_str = "; ".join(categories_prompt_parts)
         
         prompt_text = (
             f"Проанализируй это изображение и следующий текст (если есть): \"{text_to_categorize if text_to_categorize else 'Нет дополнительного текста.'}\". "
             f"К какой из следующих категорий товар на изображении лучше всего подходит? Категории: [{categories_str}]. "
-            "Ответь только названием одной категории из предоставленного списка. "
+            "Ответь только названием одной основной категории и, если применимо, одной подкатегории, разделенных символом '>'. "
+            "Например: 'Аудио и наушники > наушники tws (airpods like)'. "
+            "Если подкатегория не найдена, ответь только основной категорией. "
             "Если ни одна категория точно не подходит или на изображении нет явного товара, ответь 'не определена'."
         )
         
         # print(f"DEBUG: Gemini Prompt Text: {prompt_text}")
-        # The SDK expects a list of parts for multimodal input
         response = model.generate_content([prompt_text, img])
         
         if response.parts:
             suggested_category_raw = response.text.strip()
             # print(f"DEBUG: Gemini Raw Response: '{suggested_category_raw}'")
 
-            # 1. Check for case-insensitive exact match with predefined categories
-            for predefined_cat in categories_list:
-                if suggested_category_raw.lower() == predefined_cat.lower():
-                    # print(f"DEBUG: Case-insensitive match found: '{predefined_cat}'")
-                    return predefined_cat # Return the version from the user's list for consistency
-
-            # 2. If Gemini explicitly says "не определена" (case-insensitive)
-            #    or if the raw response is empty after stripping.
             if not suggested_category_raw or suggested_category_raw.lower() == "не определена":
-                # Try to return the canonical "не определена" if it's in categories_list
-                for predefined_cat in categories_list:
-                    if predefined_cat.lower() == "не определена":
-                        return predefined_cat
-                return "не определена" # Default if canonical "не определена" isn't in the list
+                return None, None
 
-            # 3. If no direct match, and not "не определена", and not empty,
-            #    consider it a new category suggestion by Gemini. Store it as is.
-            #    (Add a simple length check to avoid overly long/garbage responses)
-            if 0 < len(suggested_category_raw) <= 100: # Arbitrary length limit for a category name
-                print(f"INFO: Gemini suggested a new or variant category: '{suggested_category_raw}' (not an exact case-insensitive match in predefined list). Using it.")
-                return suggested_category_raw
+            # Parse the response: "Major > Sub" or "Major"
+            parts = [p.strip() for p in suggested_category_raw.split('>') if p.strip()]
+            
+            major_name = parts[0] if parts else None
+            sub_name = parts[1] if len(parts) > 1 else None
+
+            major_id = None
+            sub_id = None
+
+            # Find major category ID
+            if major_name:
+                for item in raw_categories_list:
+                    if item['type'] == 'major' and item['name'].lower() == major_name.lower():
+                        major_id = item['id']
+                        break
+            
+            # Find sub category ID, ensuring it belongs to the found major category
+            if sub_name and major_id:
+                for item in raw_categories_list:
+                    if item['type'] == 'sub' and item['name'].lower() == sub_name.lower() and item['parent_id'] == major_id:
+                        sub_id = item['id']
+                        break
+            
+            if major_id:
+                return major_id, sub_id
             else:
-                print(f"Warning: Gemini returned an unusual category string (empty or too long): '{suggested_category_raw}'. Defaulting to 'не определена'.")
-                # Try to return the canonical "не определена" if it's in categories_list
-                for predefined_cat in categories_list:
-                    if predefined_cat.lower() == "не определена":
-                        return predefined_cat
-                return "не определена"
+                # If major category not found, then neither can sub-category be valid
+                print(f"Warning: Gemini suggested category '{suggested_category_raw}' but major category '{major_name}' not found in loaded categories. Returning (None, None).")
+                return None, None
         else:
-            # print(f"DEBUG: Gemini response has no parts. Blocked? Reason: {response.prompt_feedback}")
             if response.prompt_feedback and response.prompt_feedback.block_reason:
-                 return f"заблокировано ({response.prompt_feedback.block_reason.name})" # Use .name for enum
-            return "нет ответа от AI"
+                 print(f"Gemini response blocked: {response.prompt_feedback.block_reason.name}")
+                 return None, None # f"заблокировано ({response.prompt_feedback.block_reason.name})"
+            return None, None # "нет ответа от AI"
 
     except ImportError:
         print("ERROR: The 'google-generativeai' library is not installed. Please install it using: pip install google-generativeai")
-        return "ошибка библиотеки AI"
+        return None, None # "ошибка библиотеки AI"
     except Exception as e:
         print(f"An error occurred while interacting with Gemini API: {e}")
         if "API key not valid" in str(e):
-            return "неверный API ключ"
-        return "ошибка AI"
+            return None, None # "неверный API ключ"
+        return None, None # "ошибка AI"
 
 if __name__ == '__main__':
     print("Gemini Categorizer Module")
@@ -169,14 +203,17 @@ if __name__ == '__main__':
         print(f"API Key loaded: {test_api_key[:5]}...{test_api_key[-5:]}")
         
         # Test category loading
-        cats = load_categories()
-        print(f"Loaded categories: {cats}")
+        # load_categories now returns a tuple
+        raw_cats, id_map, name_map, slug_map = load_categories()
+        print(f"Loaded categories count: {len(raw_cats)}")
+        # print(f"ID Map sample: {list(id_map.items())[:5]}")
+        # print(f"Name Map sample: {list(name_map.items())[:5]}")
 
-        if cats:
+        if raw_cats:
             # Test categorization
             sample_text_headphone = "Беспроводные наушники Awei T29 Pro с шумоподавлением, Bluetooth 5.1, отличное звучание"
             sample_text_charger = "Быстрое зарядное устройство USB-C PD 20W для iPhone и Android"
-            sample_text_headphone = "Беспроводные наушники Awei T29 Pro с шумоподавлением, Bluetooth 5.1, отличное звучание"
+            
             # For image-based test, you'd need a sample image path.
             # This test will likely fail without a valid image path.
             # For now, we'll assume a placeholder path for the test structure.
@@ -186,8 +223,9 @@ if __name__ == '__main__':
 
             print(f"\nTesting with text: '{sample_text_headphone}' and image (placeholder): '{sample_image_path_placeholder}'")
             if os.path.exists(sample_image_path_placeholder):
-                 category = get_category_from_gemini(sample_image_path_placeholder, sample_text_headphone, cats, test_api_key)
-                 print(f"Suggested Category: {category}")
+                 # Pass the full categories_data tuple
+                 major_id, sub_id = get_category_from_gemini(sample_image_path_placeholder, sample_text_headphone, (raw_cats, id_map, name_map, slug_map), test_api_key)
+                 print(f"Suggested Major ID: {major_id}, Sub ID: {sub_id}")
             else:
                  print(f"Skipping image test as '{sample_image_path_placeholder}' does not exist.")
 
