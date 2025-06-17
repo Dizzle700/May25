@@ -21,6 +21,7 @@ import database_handler # For SQLite operations
 import gemini_categorizer # For AI categorization
 import image_viewer # For the new image viewer window
 import new_category_generator # For creating new categories
+import message_counter_dialog # Import the new dialog
 
 from telethon import TelegramClient, events
 from telethon.tl.types import MessageMediaPhoto
@@ -880,9 +881,11 @@ class MainWindow(QMainWindow):
         self.stop_button = QPushButton("Stop")
         self.viewer_button = QPushButton("Viewer Mode") # New Viewer Button
         self.viewer_button.setStyleSheet("background-color: #28a745; border-color: #28a745;") # Green color
+        self.message_count_button = QPushButton("Count Messages") # New button for message count
+        self.message_count_button.setStyleSheet("background-color: #007bff; border-color: #007bff;") # Blue color
 
         # Set button size policies
-        for button in [self.start_button, self.pause_resume_button, self.stop_button, self.viewer_button]:
+        for button in [self.start_button, self.pause_resume_button, self.stop_button, self.viewer_button, self.message_count_button]:
             button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
             button.setMinimumHeight(40)  # Taller buttons for better touch targets
 
@@ -890,11 +893,13 @@ class MainWindow(QMainWindow):
         self.pause_resume_button.clicked.connect(self.toggle_pause_resume)
         self.stop_button.clicked.connect(self.stop_download)
         self.viewer_button.clicked.connect(self.open_image_viewer) # Connect new button
+        self.message_count_button.clicked.connect(self.open_message_counter) # Connect new button
 
         button_layout.addWidget(self.start_button)
         button_layout.addWidget(self.pause_resume_button)
         button_layout.addWidget(self.stop_button)
         button_layout.addWidget(self.viewer_button) # Add new button to layout
+        button_layout.addWidget(self.message_count_button) # Add new button to layout
         layout.addLayout(button_layout)
 
         layout.addStretch() # Push status bar to bottom
@@ -1494,6 +1499,26 @@ class MainWindow(QMainWindow):
         except Exception as e:
             self.show_error("Viewer Error", f"Could not open image viewer: {e}")
             print(f"Error opening image viewer: {e}")
+
+    def open_message_counter(self):
+        """Opens the message counter dialog."""
+        if not self.current_db_path:
+            self.show_error("Message Counter Error", "No database selected. Please choose or create a database first.")
+            return
+            
+        try:
+            # Check if database exists and is not empty
+            if not os.path.exists(self.current_db_path) or os.path.getsize(self.current_db_path) == 0:
+                 QMessageBox.information(self, "Message Counter", 
+                                         f"Database '{os.path.basename(self.current_db_path)}' is empty or not found. "
+                                         "Please download images first or select a valid database.")
+                 return
+
+            self.message_counter_dialog = message_counter_dialog.MessageCounterDialog(self.current_db_path, self)
+            self.message_counter_dialog.exec() # Use exec() for a modal dialog
+        except Exception as e:
+            self.show_error("Message Counter Error", f"Could not open message counter: {e}")
+            print(f"Error opening message counter: {e}")
 
 
     def resizeEvent(self, event):
