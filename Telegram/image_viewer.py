@@ -227,6 +227,10 @@ class ImageViewerWindow(QDialog):
             info_text.append(f"<b>Sub Category ID:</b> {sub_cat_id if sub_cat_id else 'N/A'}")
             info_text.append(f"<b>AI Category:</b> {display_category}")
             
+            # Add Brand Tag
+            brand_tag = img_data['brand_tag'] if img_data['brand_tag'] is not None else "N/A"
+            info_text.append(f"<b>Brand Tag:</b> {brand_tag}")
+
             # Add other fields
             fields_to_display = {
                 "sanitized_caption": "Sanitized Caption",

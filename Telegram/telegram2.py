@@ -545,7 +545,8 @@ class DownloaderWorker(QObject):
                                 'major_category_id': None, # Will be set by AI
                                 'sub_category_id': None, # Will be set by AI
                                 'sanitized_caption': sanitize_caption_text(caption_raw), # Add sanitized caption
-                                'price': extract_price_from_caption(caption_raw) # Extract price
+                                'price': extract_price_from_caption(caption_raw), # Extract price
+                                'brand_tag': None # New field for brand tag, will be set by AI
                             }
 
                             if can_categorize_ai:
@@ -555,7 +556,7 @@ class DownloaderWorker(QObject):
                                 if caption_for_ai and caption_for_ai.lower() != "no_caption":
                                     self.status_updated.emit(f"Categorizing with AI: {filename_sanitized}...")
                                     
-                                    major_id, sub_id = gemini_categorizer.get_category_from_gemini(
+                                    major_id, sub_id, brand_tag = gemini_categorizer.get_category_from_gemini(
                                         full_path, # Pass the image path
                                         caption_for_ai,
                                         self.categories_data, # Pass the structured categories data
@@ -564,6 +565,7 @@ class DownloaderWorker(QObject):
                                     
                                     db_metadata['major_category_id'] = major_id
                                     db_metadata['sub_category_id'] = sub_id
+                                    db_metadata['brand_tag'] = brand_tag # Set the brand tag
 
                                     if major_id:
                                         major_name = self.categories_data[1].get(major_id, {}).get('name', 'N/A')
@@ -572,8 +574,15 @@ class DownloaderWorker(QObject):
                                         self.status_updated.emit(f"AI Category for {filename_sanitized}: {display_cat}")
                                     else:
                                         self.status_updated.emit(f"AI Category for {filename_sanitized}: не определена")
+                                    
+                                    if brand_tag:
+                                        self.status_updated.emit(f"Brand Tag for {filename_sanitized}: {brand_tag}")
+                                    else:
+                                        self.status_updated.emit(f"Brand Tag for {filename_sanitized}: не определен")
+
                                 else:
                                     self.status_updated.emit(f"AI Category for {filename_sanitized}: нет описания для AI")
+                                    self.status_updated.emit(f"Brand Tag for {filename_sanitized}: нет описания для AI")
                             
                             # Pass the db_path to insert_image_metadata
                             current_db_path = self.settings_dict.get('db_path')

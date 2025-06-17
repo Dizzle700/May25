@@ -60,9 +60,83 @@ def load_categories(categories_file_path=DEFAULT_CATEGORIES_FILE):
     id_to_category_map, name_to_id_map, slug_to_id_map = _build_category_maps(categories_data)
     return categories_data, id_to_category_map, name_to_id_map, slug_to_id_map
 
+DEFAULT_CATEGORIES_FILE = os.path.join(os.path.dirname(__file__), "categories.json")
+DEFAULT_BRANDS_FILE = os.path.join(os.path.dirname(__file__), "brands.txt") # New constant for brands file
+
+def get_gemini_api_key():
+    """Reads the Gemini API key from the config file."""
+    config = configparser.ConfigParser()
+    if not os.path.exists(CONFIG_FILE_PATH):
+        print(f"Error: Configuration file not found at {CONFIG_FILE_PATH}")
+        return None
+    config.read(CONFIG_FILE_PATH)
+    try:
+        return config.get("Gemini", "api_key")
+    except (configparser.NoSectionError, configparser.NoOptionError):
+        print("Error: GEMINI_API_KEY not found in config.ini under [Gemini] section.")
+        return None
+
+def _build_category_maps(categories_data):
+    """
+    Builds lookup maps from the flat categories JSON data.
+    Returns:
+        tuple: (id_to_category_map, name_to_id_map, slug_to_id_map)
+    """
+    id_to_category_map = {item['id']: item for item in categories_data}
+    name_to_id_map = {item['name'].lower(): item['id'] for item in categories_data}
+    slug_to_id_map = {item['slug'].lower(): item['id'] for item in categories_data}
+    return id_to_category_map, name_to_id_map, slug_to_id_map
+
+def load_categories(categories_file_path=DEFAULT_CATEGORIES_FILE):
+    """
+    Loads categories from a JSON file and returns structured data and lookup maps.
+    Returns:
+        tuple: (raw_categories_list, id_to_category_map, name_to_id_map, slug_to_id_map)
+    """
+    categories_data = []
+    try:
+        with open(categories_file_path, 'r', encoding='utf-8') as f:
+            categories_data = json.load(f)
+    except FileNotFoundError:
+        print(f"Warning: Categories JSON file not found at {categories_file_path}. Returning empty data.")
+        return [], {}, {}, {}
+    except json.JSONDecodeError as e:
+        print(f"Error decoding categories JSON from {categories_file_path}: {e}. Returning empty data.")
+        return [], {}, {}, {}
+    except Exception as e:
+        print(f"Error loading categories from {categories_file_path}: {e}. Returning empty data.")
+        return [], {}, {}, {}
+    
+    if not categories_data:
+        print(f"Warning: No categories loaded from {categories_file_path}. Ensure the file is not empty and has valid JSON entries.")
+        return [], {}, {}, {}
+    
+    id_to_category_map, name_to_id_map, slug_to_id_map = _build_category_maps(categories_data)
+    return categories_data, id_to_category_map, name_to_id_map, slug_to_id_map
+
+def load_brands(brands_file_path=DEFAULT_BRANDS_FILE):
+    """
+    Loads a list of brands from a text file, one brand per line.
+    Returns:
+        list: A list of brand names (strings).
+    """
+    brands = []
+    try:
+        with open(brands_file_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                brand = line.strip()
+                if brand and not brand.startswith('#'): # Ignore empty lines and comments
+                    brands.append(brand)
+    except FileNotFoundError:
+        print(f"Warning: Brands file not found at {brands_file_path}. Returning empty list.")
+    except Exception as e:
+        print(f"Error loading brands from {brands_file_path}: {e}. Returning empty list.")
+    return brands
+
 def get_category_from_gemini(image_path, text_to_categorize, categories_data, api_key):
     """
-    Uses Gemini AI to categorize the given image and text based on the provided categories list.
+    Uses Gemini AI to categorize the given image and text based on the provided categories list,
+    and also extract a brand tag.
 
     Args:
         image_path (str): Path to the image file.
@@ -71,19 +145,20 @@ def get_category_from_gemini(image_path, text_to_categorize, categories_data, ap
         api_key (str): The Gemini API key.
 
     Returns:
-        tuple: (major_category_id, sub_category_id) or (None, None) on failure/not found.
+        tuple: (major_category_id, sub_category_id, brand_tag) or (None, None, None) on failure/not found.
     """
     raw_categories_list, id_to_category_map, name_to_id_map, slug_to_id_map = categories_data
+    brands_list = load_brands() # Load brands here
 
     if not api_key or api_key == "YOUR_GEMINI_API_KEY":
-        return None, None # "не настроен API ключ"
+        return None, None, None # "не настроен API ключ"
 
     if not raw_categories_list:
-        return None, None # "нет списка категорий"
+        return None, None, None # "нет списка категорий"
 
     if not image_path or not os.path.exists(image_path):
         print(f"Warning: Image path invalid or file does not exist: {image_path}. Skipping AI categorization.")
-        return None, None # "файл изображения не найден"
+        return None, None, None # "файл изображения не найден"
 
     try:
         genai.configure(api_key=api_key)
@@ -96,7 +171,7 @@ def get_category_from_gemini(image_path, text_to_categorize, categories_data, ap
             "temperature": 0.2, 
             "top_p": 1,
             "top_k": 32,
-            "max_output_tokens": 100, # Increased token limit for two categories
+            "max_output_tokens": 200, # Increased token limit for category and brand
         }
         safety_settings = [
             {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
@@ -130,68 +205,95 @@ def get_category_from_gemini(image_path, text_to_categorize, categories_data, ap
 
         categories_str = "; ".join(categories_prompt_parts)
         
+        brands_str = ", ".join(sorted(brands_list)) if brands_list else "неизвестный бренд"
+
         prompt_text = (
             f"Проанализируй это изображение и следующий текст (если есть): \"{text_to_categorize if text_to_categorize else 'Нет дополнительного текста.'}\". "
-            f"К какой из следующих категорий товар на изображении лучше всего подходит? Категории: [{categories_str}]. "
+            f"1. К какой из следующих категорий товар на изображении лучше всего подходит? Категории: [{categories_str}]. "
             "Ответь только названием одной основной категории и, если применимо, одной подкатегории, разделенных символом '>'. "
             "Например: 'Аудио и наушники > наушники tws (airpods like)'. "
             "Если подкатегория не найдена, ответь только основной категорией. "
-            "Если ни одна категория точно не подходит или на изображении нет явного товара, ответь 'не определена'."
+            "Если ни одна категория точно не подходит или на изображении нет явного товара, ответь 'не определена'.\n"
+            f"2. Определи бренд товара, ПРЕДПОЧТИТЕЛЬНО ИЗ ТЕКСТА НА ИЗОБРАЖЕНИИ, или из предоставленного текста. Выбери бренд из следующего списка: [{brands_str}]. "
+            "Ответь 'Brand: [Название бренда]' или 'Brand: не определен', если бренд не найден в списке или на изображении/в тексте."
+            "Пример ответа: 'Аудио и наушники > наушники tws (airpods like)\nBrand: Awei'"
         )
         
         # print(f"DEBUG: Gemini Prompt Text: {prompt_text}")
         response = model.generate_content([prompt_text, img])
         
         if response.parts:
-            suggested_category_raw = response.text.strip()
-            # print(f"DEBUG: Gemini Raw Response: '{suggested_category_raw}'")
+            suggested_response_raw = response.text.strip()
+            # print(f"DEBUG: Gemini Raw Response: '{suggested_response_raw}'")
 
-            if not suggested_category_raw or suggested_category_raw.lower() == "не определена":
-                return None, None
-
-            # Parse the response: "Major > Sub" or "Major"
-            parts = [p.strip() for p in suggested_category_raw.split('>') if p.strip()]
-            
-            major_name = parts[0] if parts else None
-            sub_name = parts[1] if len(parts) > 1 else None
+            # Split response into category and brand parts
+            response_lines = suggested_response_raw.split('\n')
+            category_line = response_lines[0].strip() if response_lines else ""
+            brand_line = ""
+            for line in response_lines[1:]:
+                if line.strip().lower().startswith("brand:"):
+                    brand_line = line.strip()
+                    break
 
             major_id = None
             sub_id = None
+            brand_tag = None
 
-            # Find major category ID
-            if major_name:
-                for item in raw_categories_list:
-                    if item['type'] == 'major' and item['name'].lower() == major_name.lower():
-                        major_id = item['id']
-                        break
+            # Parse Category
+            if category_line and category_line.lower() != "не определена":
+                parts = [p.strip() for p in category_line.split('>') if p.strip()]
+                major_name = parts[0] if parts else None
+                sub_name = parts[1] if len(parts) > 1 else None
+
+                # Find major category ID
+                if major_name:
+                    for item in raw_categories_list:
+                        if item['type'] == 'major' and item['name'].lower() == major_name.lower():
+                            major_id = item['id']
+                            break
+                
+                # Find sub category ID, ensuring it belongs to the found major category
+                if sub_name and major_id:
+                    for item in raw_categories_list:
+                        if item['type'] == 'sub' and item['name'].lower() == sub_name.lower() and item['parent_id'] == major_id:
+                            sub_id = item['id']
+                            break
             
-            # Find sub category ID, ensuring it belongs to the found major category
-            if sub_name and major_id:
-                for item in raw_categories_list:
-                    if item['type'] == 'sub' and item['name'].lower() == sub_name.lower() and item['parent_id'] == major_id:
-                        sub_id = item['id']
-                        break
-            
+            # Parse Brand Tag
+            if brand_line.lower().startswith("brand:"):
+                brand_value = brand_line[len("brand:"):].strip()
+                if brand_value.lower() != "не определен":
+                    # Validate brand against the loaded list (case-insensitive)
+                    if brands_list:
+                        found_brand = next((b for b in brands_list if b.lower() == brand_value.lower()), None)
+                        if found_brand:
+                            brand_tag = found_brand # Use the canonical casing from the list
+                        else:
+                            print(f"Warning: Gemini suggested brand '{brand_value}' not found in provided brands list. Setting to None.")
+                            brand_tag = None
+                    else: # If no brands list was provided, accept any non-"не определен" brand
+                        brand_tag = brand_value
+
             if major_id:
-                return major_id, sub_id
+                return major_id, sub_id, brand_tag
             else:
                 # If major category not found, then neither can sub-category be valid
-                print(f"Warning: Gemini suggested category '{suggested_category_raw}' but major category '{major_name}' not found in loaded categories. Returning (None, None).")
-                return None, None
+                print(f"Warning: Gemini suggested category '{category_line}' but major category '{major_name}' not found in loaded categories. Returning (None, None, {brand_tag}).")
+                return None, None, brand_tag
         else:
             if response.prompt_feedback and response.prompt_feedback.block_reason:
                  print(f"Gemini response blocked: {response.prompt_feedback.block_reason.name}")
-                 return None, None # f"заблокировано ({response.prompt_feedback.block_reason.name})"
-            return None, None # "нет ответа от AI"
+                 return None, None, None # f"заблокировано ({response.prompt_feedback.block_reason.name})"
+            return None, None, None # "нет ответа от AI"
 
     except ImportError:
         print("ERROR: The 'google-generativeai' library is not installed. Please install it using: pip install google-generativeai")
-        return None, None # "ошибка библиотеки AI"
+        return None, None, None # "ошибка библиотеки AI"
     except Exception as e:
         print(f"An error occurred while interacting with Gemini API: {e}")
         if "API key not valid" in str(e):
-            return None, None # "неверный API ключ"
-        return None, None # "ошибка AI"
+            return None, None, None # "неверный API ключ"
+        return None, None, None # "ошибка AI"
 
 if __name__ == '__main__':
     print("Gemini Categorizer Module")
@@ -209,6 +311,11 @@ if __name__ == '__main__':
         # print(f"ID Map sample: {list(id_map.items())[:5]}")
         # print(f"Name Map sample: {list(name_map.items())[:5]}")
 
+        # Test brand loading
+        loaded_brands = load_brands()
+        print(f"Loaded brands count: {len(loaded_brands)}")
+        # print(f"Brands sample: {loaded_brands[:5]}")
+
         if raw_cats:
             # Test categorization
             sample_text_headphone = "Беспроводные наушники Awei T29 Pro с шумоподавлением, Bluetooth 5.1, отличное звучание"
@@ -224,8 +331,8 @@ if __name__ == '__main__':
             print(f"\nTesting with text: '{sample_text_headphone}' and image (placeholder): '{sample_image_path_placeholder}'")
             if os.path.exists(sample_image_path_placeholder):
                  # Pass the full categories_data tuple
-                 major_id, sub_id = get_category_from_gemini(sample_image_path_placeholder, sample_text_headphone, (raw_cats, id_map, name_map, slug_map), test_api_key)
-                 print(f"Suggested Major ID: {major_id}, Sub ID: {sub_id}")
+                 major_id, sub_id, brand_tag = get_category_from_gemini(sample_image_path_placeholder, sample_text_headphone, (raw_cats, id_map, name_map, slug_map), test_api_key)
+                 print(f"Suggested Major ID: {major_id}, Sub ID: {sub_id}, Brand Tag: {brand_tag}")
             else:
                  print(f"Skipping image test as '{sample_image_path_placeholder}' does not exist.")
 

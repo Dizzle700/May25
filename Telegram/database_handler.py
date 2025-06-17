@@ -36,7 +36,8 @@ def initialize_database(db_path):
             major_category_id TEXT, -- ID of the major category
             sub_category_id TEXT, -- ID of the sub category
             sanitized_caption TEXT, -- Caption cleaned of emojis and extra whitespace
-            price TEXT -- Extracted prices as JSON string
+            price TEXT, -- Extracted prices as JSON string
+            brand_tag TEXT -- New field for brand tag
         )
     """)
     # Attempt to add columns if they don't exist (for existing databases)
@@ -44,7 +45,8 @@ def initialize_database(db_path):
         "major_category_id": "TEXT",
         "sub_category_id": "TEXT",
         "sanitized_caption": "TEXT",
-        "price": "TEXT"
+        "price": "TEXT",
+        "brand_tag": "TEXT"
     }
     for column_name, column_type in columns_to_add.items():
         try:
@@ -73,12 +75,12 @@ def insert_image_metadata(metadata, db_path):
                 message_id, channel, image_number_in_message, caption, 
                 filename, full_path, download_date, download_time, 
                 original_filename, utc_timestamp, message_group, telegram_message_date, 
-                major_category_id, sub_category_id, sanitized_caption, price
+                major_category_id, sub_category_id, sanitized_caption, price, brand_tag
             ) VALUES (
                 :message_id, :channel, :image_number_in_message, :caption,
                 :filename, :full_path, :download_date, :download_time,
                 :original_filename, :utc_timestamp, :message_group, :telegram_message_date, 
-                :major_category_id, :sub_category_id, :sanitized_caption, :price
+                :major_category_id, :sub_category_id, :sanitized_caption, :price, :brand_tag
             )
         """, metadata)
         conn.commit()
