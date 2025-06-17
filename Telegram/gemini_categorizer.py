@@ -156,15 +156,31 @@ def get_category_from_gemini(image_path, text_to_categorize, categories_data, ap
     if not raw_categories_list:
         return None, None, None # "нет списка категорий"
 
-    if not image_path or not os.path.exists(image_path):
-        print(f"Warning: Image path invalid or file does not exist: {image_path}. Skipping AI categorization.")
-        return None, None, None # "файл изображения не найден"
+    # Initialize img to None
+    img = None 
+    # Determine content for Gemini based on image_path and text_to_categorize
+    contents = []
+    if image_path and os.path.exists(image_path):
+        try:
+            img = Image.open(image_path)
+            contents.append(img)
+        except Exception as e:
+            print(f"Warning: Could not load image from {image_path}: {e}. Proceeding with text only if available.")
+            # Do not return here, try to proceed with text if image fails to load
+    elif image_path is not None: # image_path was provided but file doesn't exist
+        print(f"Warning: Image file does not exist at {image_path}. Proceeding with text only if available.")
+    # If image_path is None (text-only mode), no warning is printed here.
+
+    if text_to_categorize:
+        contents.append(text_to_categorize)
+    
+    if not contents:
+        print("Warning: No image or text content provided for AI categorization. Skipping.")
+        return None, None, None # "нет контента для AI"
 
     try:
         genai.configure(api_key=api_key)
         
-        img = Image.open(image_path)
-
         model_name_to_use = "gemini-1.5-pro-latest" 
         
         generation_config = {
@@ -207,20 +223,33 @@ def get_category_from_gemini(image_path, text_to_categorize, categories_data, ap
         
         brands_str = ", ".join(sorted(brands_list)) if brands_list else "неизвестный бренд"
 
-        prompt_text = (
-            f"Проанализируй это изображение и следующий текст (если есть): \"{text_to_categorize if text_to_categorize else 'Нет дополнительного текста.'}\". "
-            f"1. К какой из следующих категорий товар на изображении лучше всего подходит? Категории: [{categories_str}]. "
-            "Ответь только названием одной основной категории и, если применимо, одной подкатегории, разделенных символом '>'. "
-            "Например: 'Аудио и наушники > наушники tws (airpods like)'. "
-            "Если подкатегория не найдена, ответь только основной категорией. "
-            "Если ни одна категория точно не подходит или на изображении нет явного товара, ответь 'не определена'.\n"
-            f"2. Определи бренд товара, ПРЕДПОЧТИТЕЛЬНО ИЗ ТЕКСТА НА ИЗОБРАЖЕНИИ, или из предоставленного текста. Выбери бренд из следующего списка: [{brands_str}]. "
-            "Ответь 'Brand: [Название бренда]' или 'Brand: не определен', если бренд не найден в списке или на изображении/в тексте."
-            "Пример ответа: 'Аудио и наушники > наушники tws (airpods like)\nBrand: Awei'"
-        )
+        # Adjust prompt based on whether image content is included
+        if img: # If image was successfully loaded and added to contents
+            prompt_text = (
+                f"Проанализируй это изображение и следующий текст (если есть): \"{text_to_categorize if text_to_categorize else 'Нет дополнительного текста.'}\". "
+                f"1. К какой из следующих ПОДКАТЕГОРИЙ товар на изображении лучше всего подходит? Подкатегории: [{categories_str}]. "
+                "Ответь только названием одной подкатегории. "
+                "Например: 'наушники tws (airpods like)'. "
+                "Если ни одна подкатегория точно не подходит или на изображении нет явного товара, ответь 'не определена'.\n"
+                f"2. Определи бренд товара, ПРЕДПОЧТИТЕЛЬНО ИЗ ТЕКСТА НА ИЗОБРАЖЕНИИ, или из предоставленного текста. Выбери бренд из следующего списка: [{brands_str}]. "
+                "Ответь 'Brand: [Название бренда]' или 'Brand: не определен', если бренд не найден в списке или на изображении/в тексте."
+                "Пример ответа: 'наушники tws (airpods like)\nBrand: Awei'"
+            )
+        else: # Only text is available
+            prompt_text = (
+                f"Проанализируй следующий текст: \"{text_to_categorize}\". "
+                f"1. К какой из следующих ПОДКАТЕГОРИЙ товар, описанный в тексте, лучше всего подходит? Подкатегории: [{categories_str}]. "
+                "Ответь только названием одной подкатегории. "
+                "Например: 'наушники tws (airpods like)'. "
+                "Если ни одна подкатегория точно не подходит или в тексте нет явного товара, ответь 'не определена'.\n"
+                f"2. Определи бренд товара из предоставленного текста. Выбери бренд из следующего списка: [{brands_str}]. "
+                "Ответь 'Brand: [Название бренда]' или 'Brand: не определен', если бренд не найден в списке или в тексте."
+                "Пример ответа: 'наушники tws (airpods like)\nBrand: Awei'"
+            )
         
         # print(f"DEBUG: Gemini Prompt Text: {prompt_text}")
-        response = model.generate_content([prompt_text, img])
+        contents.insert(0, prompt_text) # Add prompt text as the first element
+        response = model.generate_content(contents)
         
         if response.parts:
             suggested_response_raw = response.text.strip()
@@ -228,7 +257,7 @@ def get_category_from_gemini(image_path, text_to_categorize, categories_data, ap
 
             # Split response into category and brand parts
             response_lines = suggested_response_raw.split('\n')
-            category_line = response_lines[0].strip() if response_lines else ""
+            sub_category_line = response_lines[0].strip() if response_lines else ""
             brand_line = ""
             for line in response_lines[1:]:
                 if line.strip().lower().startswith("brand:"):
@@ -239,26 +268,20 @@ def get_category_from_gemini(image_path, text_to_categorize, categories_data, ap
             sub_id = None
             brand_tag = None
 
-            # Parse Category
-            if category_line and category_line.lower() != "не определена":
-                parts = [p.strip() for p in category_line.split('>') if p.strip()]
-                major_name = parts[0] if parts else None
-                sub_name = parts[1] if len(parts) > 1 else None
-
-                # Find major category ID
-                if major_name:
-                    for item in raw_categories_list:
-                        if item['type'] == 'major' and item['name'].lower() == major_name.lower():
-                            major_id = item['id']
-                            break
+            # Parse Sub-Category and derive Major Category
+            if sub_category_line and sub_category_line.lower() != "не определена":
+                sub_name = sub_category_line
                 
-                # Find sub category ID, ensuring it belongs to the found major category
-                if sub_name and major_id:
-                    for item in raw_categories_list:
-                        if item['type'] == 'sub' and item['name'].lower() == sub_name.lower() and item['parent_id'] == major_id:
-                            sub_id = item['id']
-                            break
-            
+                # Find sub category ID and its parent major category ID
+                for item in raw_categories_list:
+                    if item['type'] == 'sub' and item['name'].lower() == sub_name.lower():
+                        sub_id = item['id']
+                        major_id = item['parent_id'] # Get parent ID from the sub-category
+                        break
+                
+                if not sub_id:
+                    print(f"Warning: Gemini suggested sub-category '{sub_name}' not found in loaded categories. Returning (None, None, {brand_tag}).")
+                    
             # Parse Brand Tag
             if brand_line.lower().startswith("brand:"):
                 brand_value = brand_line[len("brand:"):].strip()
@@ -274,12 +297,7 @@ def get_category_from_gemini(image_path, text_to_categorize, categories_data, ap
                     else: # If no brands list was provided, accept any non-"не определен" brand
                         brand_tag = brand_value
 
-            if major_id:
-                return major_id, sub_id, brand_tag
-            else:
-                # If major category not found, then neither can sub-category be valid
-                print(f"Warning: Gemini suggested category '{category_line}' but major category '{major_name}' not found in loaded categories. Returning (None, None, {brand_tag}).")
-                return None, None, brand_tag
+            return major_id, sub_id, brand_tag
         else:
             if response.prompt_feedback and response.prompt_feedback.block_reason:
                  print(f"Gemini response blocked: {response.prompt_feedback.block_reason.name}")
@@ -325,9 +343,6 @@ if __name__ == '__main__':
             # This test will likely fail without a valid image path.
             # For now, we'll assume a placeholder path for the test structure.
             sample_image_path_placeholder = "path/to/sample_image.jpg" # User needs to replace this for local testing
-            print(f"Note: Standalone test requires a valid image at '{sample_image_path_placeholder}'")
-
-
             print(f"\nTesting with text: '{sample_text_headphone}' and image (placeholder): '{sample_image_path_placeholder}'")
             if os.path.exists(sample_image_path_placeholder):
                  # Pass the full categories_data tuple

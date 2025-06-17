@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QLineEdit, QPushButton, QFileDialog, QStatusBar,
     QMessageBox, QDateEdit, QFormLayout, QSizePolicy, QDialog,
-    QCheckBox, QProgressBar, QTextEdit, QDialogButtonBox
+    QCheckBox, QProgressBar, QTextEdit, QDialogButtonBox, QComboBox # Added QComboBox
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QObject, QSettings, QDate
 from PyQt6.QtGui import QPalette, QColor
@@ -556,8 +556,12 @@ class DownloaderWorker(QObject):
                                 if caption_for_ai and caption_for_ai.lower() != "no_caption":
                                     self.status_updated.emit(f"Categorizing with AI: {filename_sanitized}...")
                                     
+                                    ai_mode = self.settings_dict.get('ai_mode', 'image_and_text')
+                                    
+                                    image_path_for_ai = full_path if ai_mode == 'image_and_text' else None
+
                                     major_id, sub_id, brand_tag = gemini_categorizer.get_category_from_gemini(
-                                        full_path, # Pass the image path
+                                        image_path_for_ai, # Pass the image path or None based on AI mode
                                         caption_for_ai,
                                         self.categories_data, # Pass the structured categories data
                                         gemini_api_key
@@ -855,6 +859,14 @@ class MainWindow(QMainWindow):
         self.ai_categorization_checkbox.setToolTip("Uses Gemini AI to categorize product images based on caption and categories file.")
         ai_options_layout.addWidget(self.ai_categorization_checkbox)
         
+        # New AI Mode selection
+        self.ai_mode_combo = QComboBox()
+        self.ai_mode_combo.addItem("Image and Text (Default)", "image_and_text")
+        self.ai_mode_combo.addItem("Text Only", "text_only")
+        self.ai_mode_combo.setToolTip("Select how Gemini AI should categorize: using both image and text, or text only.")
+        ai_options_layout.addWidget(QLabel("AI Mode:"))
+        ai_options_layout.addWidget(self.ai_mode_combo)
+
         self.auto_create_category_checkbox = QCheckBox("Auto-create new categories")
         self.auto_create_category_checkbox.setToolTip("If AI can't find a match, it will try to create a new category and add it to your file.")
         ai_options_layout.addWidget(self.auto_create_category_checkbox)
@@ -956,6 +968,7 @@ class MainWindow(QMainWindow):
             'preserve_names': self.preserve_names_checkbox.isChecked(),
             'exclusion_patterns': self.settings.value("downloader/exclusion_patterns_list", [], type=list),
             'ai_categorization_enabled': self.ai_categorization_checkbox.isChecked(),
+            'ai_mode': self.ai_mode_combo.currentData(), # Get selected AI mode
             'categories_file_path': self.settings.value("downloader/categories_file_path", ""),
             'auto_create_category_enabled': self.auto_create_category_checkbox.isChecked()
         }
@@ -1118,6 +1131,7 @@ class MainWindow(QMainWindow):
         
         # Disable AI Categorization options while running
         self.ai_categorization_checkbox.setEnabled(not is_running)
+        self.ai_mode_combo.setEnabled(not is_running) # Disable AI mode selection while running
         self.auto_create_category_checkbox.setEnabled(not is_running)
         self.categories_file_button.setEnabled(not is_running)
 
@@ -1235,6 +1249,12 @@ class MainWindow(QMainWindow):
         # Load AI Categorization settings
         ai_enabled = self.settings.value("downloader/ai_categorization_enabled", False, type=bool)
         self.ai_categorization_checkbox.setChecked(ai_enabled)
+        
+        # Load AI mode selection
+        ai_mode = self.settings.value("downloader/ai_mode", "image_and_text", type=str)
+        index = self.ai_mode_combo.findData(ai_mode)
+        if index != -1:
+            self.ai_mode_combo.setCurrentIndex(index)
 
         auto_create_enabled = self.settings.value("downloader/auto_create_category_enabled", False, type=bool)
         self.auto_create_category_checkbox.setChecked(auto_create_enabled)
@@ -1319,6 +1339,7 @@ class MainWindow(QMainWindow):
         self.settings.setValue("downloader/preserve_names", self.preserve_names_checkbox.isChecked())
         # exclusion_patterns_list is saved in open_exclusion_dialog
         self.settings.setValue("downloader/ai_categorization_enabled", self.ai_categorization_checkbox.isChecked())
+        self.settings.setValue("downloader/ai_mode", self.ai_mode_combo.currentData()) # Save selected AI mode
         self.settings.setValue("downloader/auto_create_category_enabled", self.auto_create_category_checkbox.isChecked())
         # categories_file_path is saved in select_categories_file()
 
