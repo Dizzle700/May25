@@ -465,28 +465,131 @@ class DownloaderWorker(QObject):
                     file_base_name_part = ""
                     ext = ".jpg" # Default extension
 
-                    if original_filename and self.settings_dict.get('preserve_names', False):
-                        base_o, ext_o = os.path.splitext(original_filename)
-                        if ext_o: # Use original extension if present
-                            ext = ext_o
-                        file_base_name_part = base_o # Use original base name
-                        filename_base_for_sanitization = f"{date_str}_{file_base_name_part}"
-                    else:
-                        # Use sanitized caption for filename base
-                        clean_caption_for_fname = sanitize_caption_text(caption_raw)
-                        if not clean_caption_for_fname or len(clean_caption_for_fname) < 3:
-                            file_base_name_part = f"image_{message.id}" # Fallback
-                        else:
-                            file_base_name_part = clean_caption_for_fname
-                        
-                        filename_base_for_sanitization = f"{date_str}_{file_base_name_part}"
-                        if message_image_count > 1:
-                            filename_base_for_sanitization = f"{filename_base_for_sanitization}_{message_image_count}"
+                    # Determine the base name for the file
+                    file_base_name_part = ""
+                    ext = ".jpg" # Default extension
+
+                    # Determine the base name for the file
+                    file_base_name_part = ""
+                    ext = ".jpg" # Default extension
+
+                    # Try to extract original filename if preserve names is enabled
+                    original_filename_base = None
+                    if self.settings_dict.get('preserve_names', False) and hasattr(message.media, 'photo') and message.media.photo:
+                        if hasattr(message.media.photo, 'attributes'):
+                            for attr in message.media.photo.attributes:
+                                if hasattr(attr, 'file_name') and attr.file_name:
+                                    original_filename_base, ext_o = os.path.splitext(attr.file_name)
+                                    if ext_o: # Use original extension if present
+                                        ext = ext_o
+                                    break
                     
+                    # Use photo.id for primary uniqueness, and message_image_count for multiple images in one message
+                    # Format: telegram_photo_[PHOTO_ID]_[IMAGE_NUMBER_IN_MESSAGE].ext
+                    # If original filename is preserved, it will be: telegram_photo_[PHOTO_ID]_[IMAGE_NUMBER_IN_MESSAGE]_original_[ORIGINAL_FILENAME_BASE].ext
+                    
+                    photo_id = message.media.photo.id if hasattr(message.media.photo, 'id') else "unknown"
+                    
+                    filename_base_for_sanitization = f"telegram_photo_{photo_id}_{message_image_count}"
+                    
+                    if original_filename_base:
+                        filename_base_for_sanitization += f"_original_{original_filename_base}"
+
                     # Apply filename sanitization (including exclusions)
-                    # exclusion_patterns are passed from the main loop's settings_dict
                     filename_sanitized = sanitize_filename(filename_base_for_sanitization, exclusion_patterns) + ext
                     full_path = os.path.join(self.settings_dict['save_folder'], filename_sanitized)
+
+                    # Check if file already exists before downloading
+                    if os.path.exists(full_path):
+                        self.status_updated.emit(f"Skipped: File already exists at {filename_sanitized}")
+                        # Prepare data for SQLite even if not downloaded (for existing files)
+                        excel_caption = caption_raw # Start with raw caption for metadata
+                        if exclusion_patterns:
+                            for pattern in exclusion_patterns:
+                                if pattern.startswith("regex:"):
+                                    regex_pattern = pattern[6:]
+                                    try:
+                                        excel_caption = re.sub(regex_pattern, '', excel_caption)
+                                    except re.error:
+                                        pass
+                                else:
+                                    excel_caption = excel_caption.replace(pattern, '')
+
+                        image_info = {
+                            'Date': message_date_local.strftime("%Y-%m-%d"),
+                            'Time': message_date_local.strftime("%H:%M:%S"),
+                            'Caption': excel_caption,
+                            'Filename': filename_sanitized,
+                            'Full Path': full_path,
+                            'Channel': self.settings_dict['channel'],
+                            'Message ID': message.id,
+                            'Image Number': message_image_count,
+                            'Message Group': message_group_counter,
+                            'Original Filename': original_filename_base if original_filename_base else "N/A",
+                            'UTC Date': message.date.strftime("%Y-%m-%d %H:%M:%S"),
+                        }
+                        
+                        db_metadata = {
+                            'message_id': image_info['Message ID'],
+                            'channel': image_info['Channel'],
+                            'image_number_in_message': image_info['Image Number'],
+                            'caption': image_info['Caption'],
+                            'filename': image_info['Filename'],
+                            'full_path': image_info['Full Path'],
+                            'download_date': image_info['Date'],
+                            'download_time': image_info['Time'],
+                            'original_filename': image_info['Original Filename'],
+                            'utc_timestamp': datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+                            'message_group': image_info['Message Group'],
+                            'telegram_message_date': image_info['UTC Date'],
+                            'major_category_id': None,
+                            'sub_category_id': None,
+                            'sanitized_caption': sanitize_caption_text(caption_raw),
+                            'price': extract_price_from_caption(caption_raw),
+                            'brand_tag': None
+                        }
+
+                        # If AI categorization is enabled, still try to categorize existing files
+                        if can_categorize_ai:
+                            caption_for_ai = db_metadata['sanitized_caption']
+                            if caption_for_ai and caption_for_ai.lower() != "no_caption":
+                                self.status_updated.emit(f"Categorizing existing file with AI: {filename_sanitized}...")
+                                ai_mode = self.settings_dict.get('ai_mode', 'image_and_text')
+                                image_path_for_ai = full_path if ai_mode == 'image_and_text' else None
+
+                                major_id, sub_id, brand_tag = gemini_categorizer.get_category_from_gemini(
+                                    image_path_for_ai,
+                                    caption_for_ai,
+                                    self.categories_data,
+                                    gemini_api_key
+                                )
+                                db_metadata['major_category_id'] = major_id
+                                db_metadata['sub_category_id'] = sub_id
+                                db_metadata['brand_tag'] = brand_tag
+
+                                if major_id:
+                                    major_name = self.categories_data[1].get(major_id, {}).get('name', 'N/A')
+                                    sub_name = self.categories_data[1].get(sub_id, {}).get('name', 'N/A') if sub_id else ''
+                                    display_cat = f"{major_name} > {sub_name}" if sub_name else major_name
+                                    self.status_updated.emit(f"AI Category for {filename_sanitized}: {display_cat}")
+                                else:
+                                    self.status_updated.emit(f"AI Category for {filename_sanitized}: не определена")
+                                
+                                if brand_tag:
+                                    self.status_updated.emit(f"Brand Tag for {filename_sanitized}: {brand_tag}")
+                                else:
+                                    self.status_updated.emit(f"Brand Tag for {filename_sanitized}: не определен")
+                            else:
+                                self.status_updated.emit(f"AI Category for {filename_sanitized}: нет описания для AI")
+                                self.status_updated.emit(f"Brand Tag for {filename_sanitized}: нет описания для AI")
+
+                        current_db_path = self.settings_dict.get('db_path')
+                        if current_db_path:
+                            database_handler.insert_image_metadata(db_metadata, current_db_path)
+                        else:
+                            self.status_updated.emit("Error: Database path not configured in worker. Skipping DB insert for existing file.")
+                        
+                        continue # Skip to next message as file already exists and metadata handled
 
                     try:
                         self.status_updated.emit(f"Downloading: {filename_sanitized}")
@@ -523,7 +626,7 @@ class DownloaderWorker(QObject):
                                 'Message ID': message.id,
                                 'Image Number': message_image_count,
                                 'Message Group': message_group_counter,
-                                'Original Filename': original_filename if original_filename else "N/A",
+                                'Original Filename': original_filename_base if original_filename_base else "N/A",
                                 'UTC Date': message.date.strftime("%Y-%m-%d %H:%M:%S"), # Original message UTC date
                             }
                             self.image_data.append(image_info) # For Excel
