@@ -395,8 +395,6 @@ class DownloaderWorker(QObject):
             
             # Track the last non-empty caption for each message
             last_caption = "no_caption"
-            current_message_id = None
-            message_image_count = 0  # Counter for images in the current message
             message_group_counter = 0  # Counter for message groups (for Excel)
 
             # Get exclusion patterns from settings_dict
@@ -411,196 +409,146 @@ class DownloaderWorker(QObject):
                     break
 
                 while self._paused:
-                    if self._stop_requested: break # Check stop request during pause
+                    if self._stop_requested: break
                     self.status_updated.emit("Paused...")
-                    await asyncio.sleep(1) # Check pause state every second
+                    await asyncio.sleep(1)
 
-                if self._stop_requested: break # Check again after pause loop
+                if self._stop_requested: break
 
-                # Date Filtering (compare timezone-aware datetimes)
-                # Messages are iterated newest to oldest.
+                if not message.media:
+                    continue
 
-                # Skip messages newer than the end date (exclusive of the day after end_date)
+                # Date Filtering
                 if message.date >= end_datetime_utc_exclusive:
-                    continue 
-
-                # Stop if message date is older than the start date filter
+                    continue
                 if message.date < start_datetime_utc:
                     self.status_updated.emit("Reached start date. Stopping iteration.")
-                    break 
+                    break
 
-                # Check if we're on a new message
-                if current_message_id != message.id:
-                    current_message_id = message.id
-                    message_image_count = 0  # Reset image counter for the new message
-                    message_group_counter += 1  # Increment group counter for each new message
-                    # Reset the caption only when we move to a new message
-                    if message.message and message.message.strip():
-                        last_caption = message.message.strip()
-                    # else keep the previous caption if the new one is empty
+                message_group_counter += 1
+                caption_raw = message.text if message.text else last_caption
+                if message.text:
+                    last_caption = message.text
 
-                if message.media and isinstance(message.media, MessageMediaPhoto):
-                    # Increment image counter for this message
-                    message_image_count += 1
-                    
-                    # Use message text as caption, or the last known caption if empty
-                    caption_raw = message.message if message.message else last_caption
-                    
-                    # Format date (local time might be nicer for filenames)
-                    message_date_local = message.date.astimezone(local_tz)
+                # This message is a product, collect its data
+                message_date_local = message.date.astimezone(local_tz)
+                
+                product_data = {
+                    'message_id': message.id,
+                    'channel': self.settings_dict['channel'],
+                    'caption': caption_raw,
+                    'download_date': message_date_local.strftime("%Y-%m-%d"),
+                    'download_time': message_date_local.strftime("%H:%M:%S"),
+                    'utc_timestamp': datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+                    'message_group': message_group_counter,
+                    'telegram_message_date': message.date.strftime("%Y-%m-%d %H:%M:%S"),
+                    'major_category_id': None,
+                    'sub_category_id': None,
+                    'sanitized_caption': sanitize_caption_text(caption_raw),
+                    'price': extract_price_from_caption(caption_raw),
+                    'brand_tag': None
+                }
+                
+                images_in_message = []
+                if message.grouped_id:
+                    # Handle albums (grouped messages)
+                    album_messages = await self.client.get_messages(channel, ids=[message.id])
+                    for m in album_messages:
+                        if m.media:
+                            images_in_message.append(m)
+                else:
+                    # Handle single image message
+                    images_in_message.append(message)
+
+                images_data_for_db = []
+                first_image_path_for_ai = None
+                
+                for idx, img_msg in enumerate(images_in_message):
+                    message_image_count = idx + 1
                     date_str = message_date_local.strftime("%Y%m%d_%H%M%S")
-
-                    # Try to extract original filename if preserve names is enabled
+                    
                     original_filename = None
-                    if self.settings_dict.get('preserve_names', False) and hasattr(message.media, 'photo') and message.media.photo:
-                        # Try to get original filename from attributes
-                        if hasattr(message.media.photo, 'attributes'):
-                            for attr in message.media.photo.attributes:
+                    if self.settings_dict.get('preserve_names', False) and hasattr(img_msg.media, 'photo') and img_msg.media.photo:
+                        if hasattr(img_msg.media.photo, 'attributes'):
+                            for attr in img_msg.media.photo.attributes:
                                 if hasattr(attr, 'file_name') and attr.file_name:
                                     original_filename = attr.file_name
                                     break
-
-                    # Create and sanitize filename, add sequence number if multiple images in message
-                    # Determine the base name for the file
+                    
                     file_base_name_part = ""
-                    ext = ".jpg" # Default extension
-
+                    ext = ".jpg"
                     if original_filename and self.settings_dict.get('preserve_names', False):
                         base_o, ext_o = os.path.splitext(original_filename)
-                        if ext_o: # Use original extension if present
-                            ext = ext_o
-                        file_base_name_part = base_o # Use original base name
+                        if ext_o: ext = ext_o
+                        file_base_name_part = base_o
                         filename_base_for_sanitization = f"{date_str}_{file_base_name_part}"
                     else:
-                        # Use sanitized caption for filename base
                         clean_caption_for_fname = sanitize_caption_text(caption_raw)
-                        if not clean_caption_for_fname or len(clean_caption_for_fname) < 3:
-                            file_base_name_part = f"image_{message.id}" # Fallback
-                        else:
-                            file_base_name_part = clean_caption_for_fname
-                        
+                        file_base_name_part = clean_caption_for_fname if clean_caption_for_fname else f"image_{img_msg.id}"
                         filename_base_for_sanitization = f"{date_str}_{file_base_name_part}"
-                        if message_image_count > 1:
-                            filename_base_for_sanitization = f"{filename_base_for_sanitization}_{message_image_count}"
-                    
-                    # Apply filename sanitization (including exclusions)
-                    # exclusion_patterns are passed from the main loop's settings_dict
+                        if len(images_in_message) > 1:
+                            filename_base_for_sanitization += f"_{message_image_count}"
+
                     filename_sanitized = sanitize_filename(filename_base_for_sanitization, exclusion_patterns) + ext
                     full_path = os.path.join(self.settings_dict['save_folder'], filename_sanitized)
 
                     try:
                         self.status_updated.emit(f"Downloading: {filename_sanitized}")
-                        await self.client.download_media(message.media, file=full_path)
+                        await self.client.download_media(img_msg.media, file=full_path)
                         self.count += 1
                         self.progress_updated.emit(self.count)
                         
-                        # Store image metadata for Excel export
-                        if self.settings_dict.get('export_excel', False):
-                            # Prepare caption for Excel, applying exclusions
-                            excel_caption = caption_raw
-                            if exclusion_patterns:
-                                for pattern in exclusion_patterns:
-                                    if pattern.startswith("regex:"):
-                                        # Handle regex pattern
-                                        regex_pattern = pattern[6:]  # Remove "regex:" prefix
-                                        try:
-                                            excel_caption = re.sub(regex_pattern, '', excel_caption)
-                                        except re.error:
-                                            # If regex is invalid, just skip it
-                                            pass
-                                    else:
-                                        # Handle normal pattern
-                                        excel_caption = excel_caption.replace(pattern, '')
-                        
-                            # Collect metadata
-                            image_info = {
-                                'Date': message_date_local.strftime("%Y-%m-%d"),
-                                'Time': message_date_local.strftime("%H:%M:%S"),
-                                'Caption': excel_caption,
-                                'Filename': filename_sanitized,
-                                'Full Path': full_path,
-                                'Channel': self.settings_dict['channel'],
-                                'Message ID': message.id,
-                                'Image Number': message_image_count,
-                                'Message Group': message_group_counter,
-                                'Original Filename': original_filename if original_filename else "N/A",
-                                'UTC Date': message.date.strftime("%Y-%m-%d %H:%M:%S"), # Original message UTC date
-                            }
-                            self.image_data.append(image_info) # For Excel
+                        if idx == 0: # Get path of first image for AI
+                            first_image_path_for_ai = full_path
 
-                            # Prepare data for SQLite
-                            db_metadata = {
-                                'message_id': image_info['Message ID'],
-                                'channel': image_info['Channel'],
-                                'image_number_in_message': image_info['Image Number'],
-                                'caption': image_info['Caption'], # This is already processed for exclusions
-                                'filename': image_info['Filename'],
-                                'full_path': image_info['Full Path'],
-                                'download_date': image_info['Date'], # Local date
-                                'download_time': image_info['Time'], # Local time
-                                'original_filename': image_info['Original Filename'],
-                                'utc_timestamp': datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"), # DB record creation timestamp
-                                'message_group': image_info['Message Group'],
-                                'telegram_message_date': image_info['UTC Date'], # Original message UTC timestamp
-                                'major_category_id': None, # Will be set by AI
-                                'sub_category_id': None, # Will be set by AI
-                                'sanitized_caption': sanitize_caption_text(caption_raw), # Add sanitized caption
-                                'price': extract_price_from_caption(caption_raw), # Extract price
-                                'brand_tag': None # New field for brand tag, will be set by AI
-                            }
+                        image_db_data = {
+                            'image_number_in_message': message_image_count,
+                            'filename': filename_sanitized,
+                            'full_path': full_path,
+                            'original_filename': original_filename
+                        }
+                        images_data_for_db.append(image_db_data)
 
-                            if can_categorize_ai:
-                                # Use the sanitized caption (without exclusions) for AI, 
-                                # as exclusions might remove keywords important for categorization.
-                                caption_for_ai = db_metadata['sanitized_caption'] 
-                                if caption_for_ai and caption_for_ai.lower() != "no_caption":
-                                    self.status_updated.emit(f"Categorizing with AI: {filename_sanitized}...")
-                                    
-                                    ai_mode = self.settings_dict.get('ai_mode', 'image_and_text')
-                                    
-                                    image_path_for_ai = full_path if ai_mode == 'image_and_text' else None
-
-                                    major_id, sub_id, brand_tag = gemini_categorizer.get_category_from_gemini(
-                                        image_path_for_ai, # Pass the image path or None based on AI mode
-                                        caption_for_ai,
-                                        self.categories_data, # Pass the structured categories data
-                                        gemini_api_key
-                                    )
-                                    
-                                    db_metadata['major_category_id'] = major_id
-                                    db_metadata['sub_category_id'] = sub_id
-                                    db_metadata['brand_tag'] = brand_tag # Set the brand tag
-
-                                    if major_id:
-                                        major_name = self.categories_data[1].get(major_id, {}).get('name', 'N/A')
-                                        sub_name = self.categories_data[1].get(sub_id, {}).get('name', 'N/A') if sub_id else ''
-                                        display_cat = f"{major_name} > {sub_name}" if sub_name else major_name
-                                        self.status_updated.emit(f"AI Category for {filename_sanitized}: {display_cat}")
-                                    else:
-                                        self.status_updated.emit(f"AI Category for {filename_sanitized}: не определена")
-                                    
-                                    if brand_tag:
-                                        self.status_updated.emit(f"Brand Tag for {filename_sanitized}: {brand_tag}")
-                                    else:
-                                        self.status_updated.emit(f"Brand Tag for {filename_sanitized}: не определен")
-
-                                else:
-                                    self.status_updated.emit(f"AI Category for {filename_sanitized}: нет описания для AI")
-                                    self.status_updated.emit(f"Brand Tag for {filename_sanitized}: нет описания для AI")
-                            
-                            # Pass the db_path to insert_image_metadata
-                            current_db_path = self.settings_dict.get('db_path')
-                            if current_db_path:
-                                database_handler.insert_image_metadata(db_metadata, current_db_path)
-                            else:
-                                self.status_updated.emit("Error: Database path not configured in worker. Skipping DB insert.")
-                            
                     except Exception as download_err:
-                        self.status_updated.emit(f"Skipped download due to error: {download_err}")
-                        # Optionally log this error more formally
-                        await asyncio.sleep(0.1) # Small delay after error
+                        self.status_updated.emit(f"Skipped download for {filename_sanitized} due to error: {download_err}")
+                        await asyncio.sleep(0.1)
 
-                await asyncio.sleep(0.05) # Small delay to prevent flooding
+                # After downloading all images for the product, do AI categorization
+                if can_categorize_ai and images_data_for_db:
+                    caption_for_ai = product_data['sanitized_caption']
+                    if caption_for_ai and caption_for_ai.lower() != "no_caption":
+                        self.status_updated.emit(f"Categorizing product (msg id: {message.id})...")
+                        ai_mode = self.settings_dict.get('ai_mode', 'image_and_text')
+                        image_path_for_ai = first_image_path_for_ai if ai_mode == 'image_and_text' else None
+
+                        major_id, sub_id, brand_tag = gemini_categorizer.get_category_from_gemini(
+                            image_path_for_ai, caption_for_ai, self.categories_data, gemini_api_key
+                        )
+                        product_data['major_category_id'] = major_id
+                        product_data['sub_category_id'] = sub_id
+                        product_data['brand_tag'] = brand_tag
+                        
+                        # Status update for category
+                        if major_id:
+                            major_name = self.categories_data[1].get(major_id, {}).get('name', 'N/A')
+                            sub_name = self.categories_data[1].get(sub_id, {}).get('name', 'N/A') if sub_id else ''
+                            display_cat = f"{major_name} > {sub_name}" if sub_name else major_name
+                            self.status_updated.emit(f"AI Category: {display_cat}")
+                        else:
+                            self.status_updated.emit("AI Category: не определена")
+                        # Status update for brand
+                        self.status_updated.emit(f"Brand Tag: {brand_tag if brand_tag else 'не определен'}")
+                    else:
+                        self.status_updated.emit("AI Category: нет описания для AI")
+
+                # Insert product and its images into DB
+                current_db_path = self.settings_dict.get('db_path')
+                if current_db_path and images_data_for_db:
+                    database_handler.insert_product_with_images(product_data, images_data_for_db, current_db_path)
+                elif not current_db_path:
+                    self.status_updated.emit("Error: DB path not configured. Skipping DB insert.")
+
+                await asyncio.sleep(0.05)
 
             # After download completes, export Excel if needed
             if self.settings_dict.get('export_excel', False) and not self._stop_requested and self.image_data:
@@ -1523,8 +1471,8 @@ class MainWindow(QMainWindow):
                                          "Please download images first or select a valid database.")
                  return
 
-            # Pass the current_db_path to the ImageViewerWindow constructor
-            self.viewer_window = image_viewer.ImageViewerWindow(self.current_db_path, self) # Pass db_path and parent
+            # Pass the current_db_path to the ProductViewerWindow constructor
+            self.viewer_window = image_viewer.ProductViewerWindow(self.current_db_path, self) # Pass db_path and parent
             self.viewer_window.show() # Use show() for a modeless dialog
         except Exception as e:
             self.show_error("Viewer Error", f"Could not open image viewer: {e}")
