@@ -143,6 +143,10 @@ class ArchiverApp(QMainWindow):
         self.user_message_input = QLineEdit()
         self.user_message_input.setPlaceholderText("e.g., ProjectBackup, Photos, etc.")
 
+        self.password_input = QLineEdit()
+        self.password_input.setPlaceholderText("Optional: Enter password for archive")
+        self.password_input.setEchoMode(QLineEdit.EchoMode.Password) # Hide password characters
+
         format_group = QGroupBox("Archive Format")
         format_layout = QHBoxLayout()
         self.zip_radio = QRadioButton("ZIP")
@@ -151,6 +155,9 @@ class ArchiverApp(QMainWindow):
         format_layout.addWidget(self.zip_radio)
         format_layout.addWidget(self.rar_radio)
         format_group.setLayout(format_layout)
+
+        self.zip_radio.toggled.connect(self.update_password_input_state)
+        self.rar_radio.toggled.connect(self.update_password_input_state)
 
         self.start_btn = QPushButton("Start Archiving")
         self.progress_bar = QProgressBar()
@@ -164,6 +171,9 @@ class ArchiverApp(QMainWindow):
         right_pane_layout.addSpacing(15)
         right_pane_layout.addWidget(QLabel("User Message (for filename):"))
         right_pane_layout.addWidget(self.user_message_input)
+        right_pane_layout.addSpacing(15)
+        right_pane_layout.addWidget(QLabel("Archive Password (optional):"))
+        right_pane_layout.addWidget(self.password_input)
         right_pane_layout.addSpacing(15)
         right_pane_layout.addWidget(format_group)
         right_pane_layout.addStretch()
@@ -182,6 +192,7 @@ class ArchiverApp(QMainWindow):
         self.select_all_btn.clicked.connect(lambda: self.set_all_states(True))
         self.deselect_all_btn.clicked.connect(lambda: self.set_all_states(False))
         self.start_btn.clicked.connect(self.start_archiving)
+        self.update_password_input_state() # Initial state update
 
     def choose_source_folder(self):
         folder = QFileDialog.getExistingDirectory(self, "Select Source Folder", self.source_dir)
@@ -222,6 +233,15 @@ class ArchiverApp(QMainWindow):
                 })
         except OSError as e:
             self.show_error_message("Error Reading Folder", f"Could not read folder contents.\nError: {e}")
+
+    def update_password_input_state(self):
+        """Enables/disables password input based on selected archive format."""
+        if self.zip_radio.isChecked():
+            self.password_input.setEnabled(False)
+            self.password_input.setPlaceholderText("Password not supported for ZIP")
+        else:
+            self.password_input.setEnabled(True)
+            self.password_input.setPlaceholderText("Optional: Enter password for archive")
 
     def sort_and_display_files(self):
         sort_key = self.sort_combo.currentText()
@@ -273,6 +293,7 @@ class ArchiverApp(QMainWindow):
         archive_format = "rar" if self.rar_radio.isChecked() else "zip"
         filename = f"{timestamp}_{user_msg}.{archive_format}" if user_msg else f"{timestamp}.{archive_format}"
         archive_path = os.path.join(self.output_dir, filename)
+        password = self.password_input.text() # Get the password
 
         self.set_ui_enabled(False)
         self.progress_bar.setVisible(True)
@@ -280,7 +301,7 @@ class ArchiverApp(QMainWindow):
         self.statusBar().showMessage("Archiving... please wait.")
 
         self.archive_thread = QThread()
-        self.archive_worker = ArchiveWorker(included_items, archive_path, archive_format, self.source_dir)
+        self.archive_worker = ArchiveWorker(included_items, archive_path, archive_format, self.source_dir, password) # Pass password
         self.archive_worker.moveToThread(self.archive_thread)
         self.archive_thread.started.connect(self.archive_worker.run)
         self.archive_worker.finished.connect(self.on_archiving_finished)
@@ -342,6 +363,7 @@ class ArchiverApp(QMainWindow):
             self.set_output_location(last_output)
             
         self.user_message_input.setText(settings.value("user_message", ""))
+        self.password_input.setText(settings.value("archive_password", "")) # Load password
         
         if settings.value("format", "zip") == "rar" and self.rar_radio.isEnabled():
             self.rar_radio.setChecked(True)
@@ -374,6 +396,7 @@ class ArchiverApp(QMainWindow):
         settings.setValue("source_dir", self.source_dir)
         settings.setValue("output_dir", self.output_dir)
         settings.setValue("user_message", self.user_message_input.text())
+        settings.setValue("archive_password", self.password_input.text()) # Save password
         settings.setValue("format", "rar" if self.rar_radio.isChecked() else "zip")
         settings.setValue("sort_index", self.sort_combo.currentIndex())
         

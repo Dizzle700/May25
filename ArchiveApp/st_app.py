@@ -24,8 +24,15 @@ def format_size(size_bytes):
 
 # --- Archiving Logic (adapted from worker.py) ---
 
-def create_zip_archive(files_to_archive, archive_path, source_folder, progress_callback):
-    """Creates a .zip archive and reports progress."""
+def create_zip_archive(files_to_archive, archive_path, source_folder, progress_callback, password=""):
+    """
+    Creates a .zip archive and reports progress.
+    Note: Python's built-in zipfile module does not support password protection.
+    If a password is provided, it will be ignored for ZIP archives.
+    """
+    if password:
+        st.warning("ZIP archiving with password is not supported by the built-in Python zipfile module. Password will be ignored.")
+
     with zipfile.ZipFile(archive_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
         total_files = len(files_to_archive)
         for i, file_path in enumerate(files_to_archive):
@@ -47,9 +54,13 @@ def create_zip_archive(files_to_archive, archive_path, source_folder, progress_c
             progress_callback(progress_percent, f"Archiving: {os.path.basename(arcname)}")
     return f"Successfully created: {os.path.basename(archive_path)}"
 
-def create_rar_archive(files_to_archive, archive_path, source_folder, progress_callback):
+def create_rar_archive(files_to_archive, archive_path, source_folder, progress_callback, password=""):
     """Creates a .rar archive and reports progress."""
-    command = ['rar', 'a', '-r', str(archive_path)] + [os.path.relpath(f, source_folder) for f in files_to_archive]
+    command = ['rar', 'a', '-r']
+    if password:
+        command.append(f'-p{password}')
+    command.append(str(archive_path))
+    command.extend([os.path.relpath(f, source_folder) for f in files_to_archive])
     
     # We need to run the command from the source folder for relative paths to work correctly
     process = subprocess.Popen(command, cwd=source_folder, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -125,6 +136,7 @@ if uploaded_file is not None:
         st.subheader("⚙️ Archive Controls")
         
         user_message = st.text_input("User Message (for filename)", placeholder="e.g., ProjectBackup, Photos, etc.")
+        password = st.text_input("Archive Password (optional)", type="password", placeholder="Enter password for archive")
         
         rar_disabled = not st.session_state.rar_available
         format_options = ["ZIP", "RAR"]
@@ -232,9 +244,9 @@ if uploaded_file is not None:
 
                 try:
                     if fmt == "zip":
-                        result_msg = create_zip_archive(included_files, archive_path, st.session_state.source_dir, update_progress)
+                        result_msg = create_zip_archive(included_files, archive_path, st.session_state.source_dir, update_progress, password)
                     else: # rar
-                        result_msg = create_rar_archive(included_files, archive_path, st.session_state.source_dir, update_progress)
+                        result_msg = create_rar_archive(included_files, archive_path, st.session_state.source_dir, update_progress, password)
 
                     st.success(result_msg)
                     

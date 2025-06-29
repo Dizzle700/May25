@@ -76,25 +76,6 @@ def load_categories(categories_file_path=DEFAULT_CATEGORIES_FILE):
 DEFAULT_CATEGORIES_FILE = os.path.join(os.path.dirname(__file__), "categories.json")
 DEFAULT_BRANDS_FILE = os.path.join(os.path.dirname(__file__), "brands.txt") # New constant for brands file
 
-def load_brands(brands_file_path=DEFAULT_BRANDS_FILE):
-    """
-    Loads a list of brands from a text file, one brand per line.
-    Returns:
-        list: A list of brand names (strings).
-    """
-    brands = []
-    try:
-        with open(brands_file_path, 'r', encoding='utf-8') as f:
-            for line in f:
-                brand = line.strip()
-                if brand and not brand.startswith('#'): # Ignore empty lines and comments
-                    brands.append(brand)
-    except FileNotFoundError:
-        print(f"Warning: Brands file not found at {brands_file_path}. Returning empty list.")
-    except Exception as e:
-        print(f"Error loading brands from {brands_file_path}: {e}. Returning empty list.")
-    return brands
-
 def get_category_from_gemini(image_path, text_to_categorize, categories_data, api_key):
     """
     Uses Gemini AI to categorize the given image and text based on the provided categories list,
@@ -110,7 +91,6 @@ def get_category_from_gemini(image_path, text_to_categorize, categories_data, ap
         tuple: (major_category_id, sub_category_id, brand_tag) or (None, None, None) on failure/not found.
     """
     raw_categories_list, id_to_category_map, name_to_id_map, slug_to_id_map = categories_data
-    brands_list = load_brands() # Load brands here
 
     if not api_key or api_key == "YOUR_GEMINI_API_KEY":
         return None, None, None # "не настроен API ключ"
@@ -183,8 +163,6 @@ def get_category_from_gemini(image_path, text_to_categorize, categories_data, ap
 
         categories_str = "; ".join(categories_prompt_parts)
         
-        brands_str = ", ".join(sorted(brands_list)) if brands_list else "неизвестный бренд"
-
         # Adjust prompt based on whether image content is included
         if img: # If image was successfully loaded and added to contents
             prompt_text = (
@@ -193,8 +171,8 @@ def get_category_from_gemini(image_path, text_to_categorize, categories_data, ap
                 "Ответь только названием одной подкатегории. "
                 "Например: 'наушники tws (airpods like)'. "
                 "Если ни одна подкатегория точно не подходит или на изображении нет явного товара, ответь 'не определена'.\n"
-                f"2. Определи бренд товара, ПРЕДПОЧТИТЕЛЬНО ИЗ ТЕКСТА НА ИЗОБРАЖЕНИИ, или из предоставленного текста. Выбери бренд из следующего списка: [{brands_str}]. "
-                "Ответь 'Brand: [Название бренда]' или 'Brand: не определен', если бренд не найден в списке или на изображении/в тексте."
+                f"2. Определи бренд товара, ПРЕДПОЧТИТЕЛЬНО ИЗ ТЕКСТА НА ИЗОБРАЖЕНИИ, или из предоставленного текста. "
+                "Ответь 'Brand: [Название бренда]' или 'Brand: не определен', если бренд не найден на изображении/в тексте."
                 "Пример ответа: 'наушники tws (airpods like)\nBrand: Awei'"
             )
         else: # Only text is available
@@ -204,8 +182,8 @@ def get_category_from_gemini(image_path, text_to_categorize, categories_data, ap
                 "Ответь только названием одной подкатегории. "
                 "Например: 'наушники tws (airpods like)'. "
                 "Если ни одна подкатегория точно не подходит или в тексте нет явного товара, ответь 'не определена'.\n"
-                f"2. Определи бренд товара из предоставленного текста. Выбери бренд из следующего списка: [{brands_str}]. "
-                "Ответь 'Brand: [Название бренда]' или 'Brand: не определен', если бренд не найден в списке или в тексте."
+                f"2. Определи бренд товара из предоставленного текста. "
+                "Ответь 'Brand: [Название бренда]' или 'Brand: не определен', если бренд не найден в тексте."
                 "Пример ответа: 'наушники tws (airpods like)\nBrand: Awei'"
             )
         
@@ -248,16 +226,7 @@ def get_category_from_gemini(image_path, text_to_categorize, categories_data, ap
             if brand_line.lower().startswith("brand:"):
                 brand_value = brand_line[len("brand:"):].strip()
                 if brand_value.lower() != "не определен":
-                    # Validate brand against the loaded list (case-insensitive)
-                    if brands_list:
-                        found_brand = next((b for b in brands_list if b.lower() == brand_value.lower()), None)
-                        if found_brand:
-                            brand_tag = found_brand # Use the canonical casing from the list
-                        else:
-                            print(f"Warning: Gemini suggested brand '{brand_value}' not found in provided brands list. Setting to None.")
-                            brand_tag = None
-                    else: # If no brands list was provided, accept any non-"не определен" brand
-                        brand_tag = brand_value
+                    brand_tag = brand_value # Accept the brand directly from Gemini
 
             return major_id, sub_id, brand_tag
         else:
@@ -276,47 +245,42 @@ def get_category_from_gemini(image_path, text_to_categorize, categories_data, ap
         return None, None, None # "ошибка AI"
 
 if __name__ == '__main__':
-    print("Gemini Categorizer Module")
-    print("Ensure you have 'google-generativeai' installed: pip install google-generativeai")
-    
-    # Test API Key
-    test_api_key = get_gemini_api_key()
-    test_model_name = get_gemini_model_name()
-
-    if test_api_key and test_api_key != "YOUR_GEMINI_API_KEY":
-        print(f"API Key loaded: {test_api_key[:5]}...{test_api_key[-5:]}")
-        print(f"Gemini Model Name loaded: {test_model_name}")
+        print("Gemini Categorizer Module")
+        print("Ensure you have 'google-generativeai' installed: pip install google-generativeai")
         
-        # Test category loading
-        # load_categories now returns a tuple
-        raw_cats, id_map, name_map, slug_map = load_categories()
-        print(f"Loaded categories count: {len(raw_cats)}")
-        # print(f"ID Map sample: {list(id_map.items())[:5]}")
-        # print(f"Name Map sample: {list(name_map.items())[:5]}")
+        # Test API Key
+        test_api_key = get_gemini_api_key()
+        test_model_name = get_gemini_model_name()
 
-        # Test brand loading
-        loaded_brands = load_brands()
-        print(f"Loaded brands count: {len(loaded_brands)}")
-        # print(f"Brands sample: {loaded_brands[:5]}")
-
-        if raw_cats:
-            # Test categorization
-            sample_text_headphone = "Беспроводные наушники Awei T29 Pro с шумоподавлением, Bluetooth 5.1, отличное звучание"
-            sample_text_charger = "Быстрое зарядное устройство USB-C PD 20W для iPhone и Android"
+        if test_api_key and test_api_key != "YOUR_GEMINI_API_KEY":
+            print(f"API Key loaded: {test_api_key[:5]}...{test_api_key[-5:]}")
+            print(f"Gemini Model Name loaded: {test_model_name}")
             
-            # For image-based test, you'd need a sample image path.
-            # This test will likely fail without a valid image path.
-            # For now, we'll assume a placeholder path for the test structure.
-            sample_image_path_placeholder = "path/to/sample_image.jpg" # User needs to replace this for local testing
-            print(f"\nTesting with text: '{sample_text_headphone}' and image (placeholder): '{sample_image_path_placeholder}'")
-            if os.path.exists(sample_image_path_placeholder):
-                 # Pass the full categories_data tuple
-                 major_id, sub_id, brand_tag = get_category_from_gemini(sample_image_path_placeholder, sample_text_headphone, (raw_cats, id_map, name_map, slug_map), test_api_key)
-                 print(f"Suggested Major ID: {major_id}, Sub ID: {sub_id}, Brand Tag: {brand_tag}")
-            else:
-                 print(f"Skipping image test as '{sample_image_path_placeholder}' does not exist.")
+            # Test category loading
+            # load_categories now returns a tuple
+            raw_cats, id_map, name_map, slug_map = load_categories()
+            print(f"Loaded categories count: {len(raw_cats)}")
+            # print(f"ID Map sample: {list(id_map.items())[:5]}")
+            # print(f"Name Map sample: {list(name_map.items())[:5]}")
 
+            if raw_cats:
+                # Test categorization
+                sample_text_headphone = "Беспроводные наушники Awei T29 Pro с шумоподавлением, Bluetooth 5.1, отличное звучание"
+                sample_text_charger = "Быстрое зарядное устройство USB-C PD 20W для iPhone и Android"
+                
+                # For image-based test, you'd need a sample image path.
+                # This test will likely fail without a valid image path.
+                # For now, we'll assume a placeholder path for the test structure.
+                sample_image_path_placeholder = "path/to/sample_image.jpg" # User needs to replace this for local testing
+                print(f"\nTesting with text: '{sample_text_headphone}' and image (placeholder): '{sample_image_path_placeholder}'")
+                if os.path.exists(sample_image_path_placeholder):
+                     # Pass the full categories_data tuple
+                     major_id, sub_id, brand_tag = get_category_from_gemini(sample_image_path_placeholder, sample_text_headphone, (raw_cats, id_map, name_map, slug_map), test_api_key)
+                     print(f"Suggested Major ID: {major_id}, Sub ID: {sub_id}, Brand Tag: {brand_tag}")
+                else:
+                     print(f"Skipping image test as '{sample_image_path_placeholder}' does not exist.")
+
+            else:
+                print("Skipping categorization test as no categories were loaded or API key is placeholder.")
         else:
-            print("Skipping categorization test as no categories were loaded or API key is placeholder.")
-    else:
-        print("Gemini API key not configured in telegram/config.ini or is a placeholder. Skipping live tests.")
+            print("Gemini API key not configured in telegram/config.ini or is a placeholder. Skipping live tests.")

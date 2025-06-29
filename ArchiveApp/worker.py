@@ -13,12 +13,13 @@ class ArchiveWorker(QObject):
     finished = pyqtSignal(str)
     error = pyqtSignal(str)
 
-    def __init__(self, files_to_archive, archive_path, archive_format, source_folder):
+    def __init__(self, files_to_archive, archive_path, archive_format, source_folder, password=""):
         super().__init__()
         self.files_to_archive = files_to_archive
         self.archive_path = archive_path
         self.archive_format = archive_format
         self.source_folder = source_folder
+        self.password = password
         self.is_running = True
 
     def run(self):
@@ -32,7 +33,14 @@ class ArchiveWorker(QObject):
             self.error.emit(f"An unexpected error occurred: {e}")
 
     def _create_zip(self):
-        """Creates a .zip archive."""
+        """
+        Creates a .zip archive.
+        Note: Python's built-in zipfile module does not support password protection.
+        If a password is provided, it will be ignored for ZIP archives.
+        """
+        if self.password:
+            self.error.emit("ZIP archiving with password is not supported by the built-in Python zipfile module. Password will be ignored.")
+
         total_files = len(self.files_to_archive)
         with zipfile.ZipFile(self.archive_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
             for i, file_path in enumerate(self.files_to_archive):
@@ -42,15 +50,18 @@ class ArchiveWorker(QObject):
                 
                 # Arcname is the path inside the zip file
                 arcname = os.path.relpath(file_path, self.source_folder)
-                zipf.write(file_path, arcname)
                 
-                # If it's a directory, add all its contents
+                # Handle directories and their contents
                 if os.path.isdir(file_path):
+                    # Add the directory itself
+                    zipf.write(file_path, arcname)
                     for root, _, files in os.walk(file_path):
                         for file in files:
                             full_sub_path = os.path.join(root, file)
                             sub_arcname = os.path.relpath(full_sub_path, self.source_folder)
                             zipf.write(full_sub_path, sub_arcname)
+                else:
+                    zipf.write(file_path, arcname)
 
                 progress_percent = int(((i + 1) / total_files) * 100)
                 self.progress.emit(progress_percent)
@@ -68,7 +79,12 @@ class ArchiveWorker(QObject):
 
         # The rar command 'a' (add) creates an archive.
         # -r recurses into directories.
-        command = ['rar', 'a', '-r', self.archive_path] + [os.path.relpath(f, self.source_folder) for f in self.files_to_archive]
+        # -p<password> sets the password.
+        command = ['rar', 'a', '-r']
+        if self.password:
+            command.append(f'-p{self.password}')
+        command.append(self.archive_path)
+        command.extend([os.path.relpath(f, self.source_folder) for f in self.files_to_archive])
 
         # We need to run the command from the source folder for relative paths to work correctly
         process = subprocess.Popen(command, cwd=self.source_folder, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, creationflags=subprocess.CREATE_NO_WINDOW)
