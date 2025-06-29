@@ -226,8 +226,8 @@ def get_category_from_gemini(image_path, text_to_categorize, categories_data, ap
         # Adjust prompt based on whether image content is included
         if img: # If image was successfully loaded and added to contents
             prompt_text = (
-                f"Проанализируй это изображение и следующий текст (если есть): \"{text_to_categorize if text_to_categorize else 'Нет дополнительного текста.'}\". "
-                f"1. К какой из следующих ПОДКАТЕГОРИЙ товар на изображении лучше всего подходит? Подкатегории: [{categories_str}]. "
+                f"ОСНОВНАЯ ЗАДАЧА - АНАЛИЗ ИЗОБРАЖЕНИЯ. Проанализируй В ПЕРВУЮ ОЧЕРЕДЬ ИЗОБРАЖЕНИЕ. Текст используй как дополнительный контекст. Текст: \"{text_to_categorize if text_to_categorize else 'Нет дополнительного текста.'}\". "
+                f"1. К какой из следующих ПОДКАТЕГОРИЙ товар НА ИЗОБРАЖЕНИИ лучше всего подходит? Подкатегории: [{categories_str}]. "
                 "Ответь только названием одной подкатегории. "
                 "Например: 'наушники tws (airpods like)'. "
                 "Если ни одна подкатегория точно не подходит или на изображении нет явного товара, ответь 'не определена'.\n"
