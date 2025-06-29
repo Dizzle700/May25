@@ -22,6 +22,19 @@ def get_gemini_api_key():
         print("Error: GEMINI_API_KEY not found in config.ini under [Gemini] section.")
         return None
 
+def get_gemini_model_name():
+    """Reads the Gemini model name from the config file."""
+    config = configparser.ConfigParser()
+    if not os.path.exists(CONFIG_FILE_PATH):
+        print(f"Error: Configuration file not found at {CONFIG_FILE_PATH}")
+        return None
+    config.read(CONFIG_FILE_PATH)
+    try:
+        return config.get("Gemini", "model_name")
+    except (configparser.NoSectionError, configparser.NoOptionError):
+        print("Error: 'model_name' not found in config.ini under [Gemini] section. Using default.")
+        return "gemini-1.5-pro-latest" # Default if not found
+
 def _build_category_maps(categories_data):
     """
     Builds lookup maps from the flat categories JSON data.
@@ -62,57 +75,6 @@ def load_categories(categories_file_path=DEFAULT_CATEGORIES_FILE):
 
 DEFAULT_CATEGORIES_FILE = os.path.join(os.path.dirname(__file__), "categories.json")
 DEFAULT_BRANDS_FILE = os.path.join(os.path.dirname(__file__), "brands.txt") # New constant for brands file
-
-def get_gemini_api_key():
-    """Reads the Gemini API key from the config file."""
-    config = configparser.ConfigParser()
-    if not os.path.exists(CONFIG_FILE_PATH):
-        print(f"Error: Configuration file not found at {CONFIG_FILE_PATH}")
-        return None
-    config.read(CONFIG_FILE_PATH)
-    try:
-        return config.get("Gemini", "api_key")
-    except (configparser.NoSectionError, configparser.NoOptionError):
-        print("Error: GEMINI_API_KEY not found in config.ini under [Gemini] section.")
-        return None
-
-def _build_category_maps(categories_data):
-    """
-    Builds lookup maps from the flat categories JSON data.
-    Returns:
-        tuple: (id_to_category_map, name_to_id_map, slug_to_id_map)
-    """
-    id_to_category_map = {item['id']: item for item in categories_data}
-    name_to_id_map = {item['name'].lower(): item['id'] for item in categories_data}
-    slug_to_id_map = {item['slug'].lower(): item['id'] for item in categories_data}
-    return id_to_category_map, name_to_id_map, slug_to_id_map
-
-def load_categories(categories_file_path=DEFAULT_CATEGORIES_FILE):
-    """
-    Loads categories from a JSON file and returns structured data and lookup maps.
-    Returns:
-        tuple: (raw_categories_list, id_to_category_map, name_to_id_map, slug_to_id_map)
-    """
-    categories_data = []
-    try:
-        with open(categories_file_path, 'r', encoding='utf-8') as f:
-            categories_data = json.load(f)
-    except FileNotFoundError:
-        print(f"Warning: Categories JSON file not found at {categories_file_path}. Returning empty data.")
-        return [], {}, {}, {}
-    except json.JSONDecodeError as e:
-        print(f"Error decoding categories JSON from {categories_file_path}: {e}. Returning empty data.")
-        return [], {}, {}, {}
-    except Exception as e:
-        print(f"Error loading categories from {categories_file_path}: {e}. Returning empty data.")
-        return [], {}, {}, {}
-    
-    if not categories_data:
-        print(f"Warning: No categories loaded from {categories_file_path}. Ensure the file is not empty and has valid JSON entries.")
-        return [], {}, {}, {}
-    
-    id_to_category_map, name_to_id_map, slug_to_id_map = _build_category_maps(categories_data)
-    return categories_data, id_to_category_map, name_to_id_map, slug_to_id_map
 
 def load_brands(brands_file_path=DEFAULT_BRANDS_FILE):
     """
@@ -181,7 +143,7 @@ def get_category_from_gemini(image_path, text_to_categorize, categories_data, ap
     try:
         genai.configure(api_key=api_key)
         
-        model_name_to_use = "gemini-1.5-pro-latest" 
+        model_name_to_use = get_gemini_model_name()
         
         generation_config = {
             "temperature": 0.2, 
@@ -319,8 +281,11 @@ if __name__ == '__main__':
     
     # Test API Key
     test_api_key = get_gemini_api_key()
+    test_model_name = get_gemini_model_name()
+
     if test_api_key and test_api_key != "YOUR_GEMINI_API_KEY":
         print(f"API Key loaded: {test_api_key[:5]}...{test_api_key[-5:]}")
+        print(f"Gemini Model Name loaded: {test_model_name}")
         
         # Test category loading
         # load_categories now returns a tuple
