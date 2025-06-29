@@ -97,6 +97,13 @@ def insert_product_with_images(product_data, images_data, db_path):
         # Insert into product_images table
         for image_data in images_data:
             image_data['product_id'] = product_id
+            # Check if the image already exists to prevent IntegrityError
+            cursor.execute("SELECT id FROM product_images WHERE full_path = ?", (image_data['full_path'],))
+            existing_image = cursor.fetchone()
+            if existing_image:
+                print(f"Info: Image with path '{image_data['full_path']}' already exists. Skipping insert.")
+                continue # Skip to the next image
+
             cursor.execute("""
                 INSERT INTO product_images (
                     product_id, image_number_in_message, filename, full_path, original_filename
@@ -108,7 +115,9 @@ def insert_product_with_images(product_data, images_data, db_path):
         conn.commit()
     except sqlite3.IntegrityError as e:
         conn.rollback()
-        print(f"Warning: Integrity error (e.g., unique path constraint). Skipping insert. Details: {e}")
+        # This specific IntegrityError should now be largely prevented by the check above,
+        # but keeping the catch for other potential integrity issues.
+        print(f"Warning: Integrity error during product/image insert. Details: {e}")
     except Exception as e:
         conn.rollback()
         print(f"Error inserting product with images into database: {e}")
