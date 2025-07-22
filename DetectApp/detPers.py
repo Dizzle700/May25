@@ -21,7 +21,7 @@ from PyQt6.QtGui import QPixmap, QImage, QFont
 from PyQt6.QtCore import Qt, QThread, QObject, pyqtSignal, pyqtSlot
 
 # --- Configuration ---
-MODEL_NAME = "yolo12x.pt"  # Use standard nano model, change if 'yolo11n.pt' is custom and correct
+MODEL_NAME = "yolo12n.pt"  # Use standard nano model, change if 'yolo11n.pt' is custom and correct
 PERSON_CLASS_NAME = "person" # YOLOv8 default name for person class
 RESULTS_FOLDER_NAME = "results_drawn"
 PERSON_PREFIX = "p_"
