@@ -11,6 +11,7 @@ from PIL import Image, ImageTk
 import io
 import queue
 from dotenv import load_dotenv
+import configparser
 
 # --- Configuration ---
 
@@ -25,14 +26,14 @@ SAFE_SEARCH_OPTIONS = ["off", "active", "high", "medium"]
 
 # Color scheme
 COLORS = {
-    "primary": "#3498db",      # Blue
-    "primary_dark": "#2980b9", # Dark Blue
-    "secondary": "#2ecc71",    # Green
+    "primary": "#8e44ad",      # Dark Purple
+    "primary_dark": "#6c3483", # Even Darker Purple
+    "secondary": "#27ae60",    # Emerald Green
     "accent": "#e74c3c",       # Red
-    "bg_dark": "#34495e",      # Dark Slate
-    "bg_light": "#ecf0f1",     # Light Gray
-    "text_dark": "#2c3e50",    # Very Dark Blue
-    "text_light": "#ffffff"    # White
+    "bg_dark": "#2c3e50",      # Very Dark Blue (almost black)
+    "bg_light": "#34495e",     # Dark Slate (for secondary backgrounds)
+    "text_dark": "#ecf0f1",    # Light Gray (for text on dark backgrounds)
+    "text_light": "#ffffff"    # White (for highlights)
 }
 
 # --- Main Application Class ---
@@ -53,6 +54,7 @@ class ImageSearchApp:
         self.gui_queue = queue.Queue()
 
         self.setup_gui()
+        self.load_settings() # Load settings on startup
         self.process_gui_queue() # Start listening for GUI updates
 
     # --- Backend and Worker Thread Logic ---
@@ -115,8 +117,11 @@ class ImageSearchApp:
                     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                     
                     # Determine the file extension to use
-                    file_extension = selected_file_type
-                    if selected_file_type == "any":
+                    self.gui_queue.put(('log', f"DEBUG: Selected file type received: {selected_file_type}", "info"))
+
+                    if selected_file_type != "any":
+                        file_extension = selected_file_type
+                    else:
                         # Try to infer from the content type or URL, otherwise default to jpg
                         content_type = response.headers.get('Content-Type', '').lower()
                         if 'png' in content_type or image_url.lower().endswith('.png'):
@@ -132,6 +137,8 @@ class ImageSearchApp:
                         else:
                             file_extension = 'jpg' # Default fallback
                     
+                    self.gui_queue.put(('log', f"DEBUG: Final file extension determined: {file_extension}", "info"))
+
                     image_name = f"{safe_query}_{i+1}_{timestamp}.{file_extension}"
                     image_path = os.path.join(query_directory, image_name)
                     
@@ -274,11 +281,11 @@ class ImageSearchApp:
         """Toggles the paused state."""
         if not self.is_paused.is_set(): # If it's paused (cleared)
             self.is_paused.set() # Resume
-            self.pause_button.config(text="Pause", bg=COLORS["secondary"])
+            self.pause_button['text'] = "Pause"
             self.status_label.config(text="Status: Running...", fg=COLORS["secondary"])
         else:
             self.is_paused.clear() # Pause
-            self.pause_button.config(text="Resume", bg=COLORS["primary"])
+            self.pause_button['text'] = "Resume"
             self.status_label.config(text="Status: Paused", fg=COLORS["accent"])
 
     def on_stop(self):
@@ -337,23 +344,26 @@ class ImageSearchApp:
     # --- UI Update and Helper Methods ---
 
     def update_ui_for_running_state(self):
-        self.search_button.config(state=tk.DISABLED)
-        self.pause_button.config(text="Pause", state=tk.NORMAL, bg=COLORS["secondary"])
-        self.stop_button.config(state=tk.NORMAL, bg=COLORS["accent"])
+        self.search_button['state'] = tk.DISABLED
+        self.pause_button['text'] = "Pause"
+        self.pause_button['state'] = tk.NORMAL
+        self.stop_button['state'] = tk.NORMAL
         self.status_label.config(text="Status: Running...", fg=COLORS["secondary"])
 
     def update_ui_for_stopped_state(self):
         self.is_running = False
-        self.search_button.config(state=tk.NORMAL)
-        self.pause_button.config(state=tk.DISABLED, text="Pause", bg=COLORS["secondary"])
-        self.stop_button.config(state=tk.DISABLED)
+        self.search_button['state'] = tk.NORMAL
+        self.pause_button['state'] = tk.DISABLED
+        self.pause_button['text'] = "Pause"
+        self.stop_button['state'] = tk.DISABLED
         self.status_label.config(text="Status: Stopped", fg=COLORS["accent"])
 
     def update_ui_for_finished_state(self):
         self.is_running = False
-        self.search_button.config(state=tk.NORMAL)
-        self.pause_button.config(state=tk.DISABLED, text="Pause", bg=COLORS["secondary"])
-        self.stop_button.config(state=tk.DISABLED)
+        self.search_button['state'] = tk.NORMAL
+        self.pause_button['state'] = tk.DISABLED
+        self.pause_button['text'] = "Pause"
+        self.stop_button['state'] = tk.DISABLED
         self.status_label.config(text="Status: Completed", fg=COLORS["primary"])
         self.progress['value'] = self.progress['maximum']
 
@@ -387,9 +397,55 @@ class ImageSearchApp:
             if messagebox.askyesno("Quit", "A search is in progress. Are you sure you want to quit?"):
                 self.is_stopped.set()
                 self.is_paused.set()
+                self.save_settings() # Save settings before destroying
                 self.root.destroy()
         else:
+            self.save_settings() # Save settings before destroying
             self.root.destroy()
+
+    def save_settings(self):
+        """Saves current GUI settings to a config.ini file."""
+        config = configparser.ConfigParser()
+        config['SETTINGS'] = {
+            'query_text': self.query_text.get("1.0", tk.END).strip(),
+            'num_images': self.num_images_entry.get(),
+            'img_size': self.img_size_combobox.get(),
+            'img_type': self.img_type_combobox.get(),
+            'img_color_type': self.img_color_type_combobox.get(),
+            'file_type': self.file_type_combobox.get(),
+            'safe_search': self.safe_search_combobox.get(),
+            'save_directory': self.save_dir_entry.get()
+        }
+        try:
+            with open('config.ini', 'w') as configfile:
+                config.write(configfile)
+            self.log("Settings saved to config.ini", "info")
+        except Exception as e:
+            self.log(f"Error saving settings: {e}", "error")
+
+    def load_settings(self):
+        """Loads GUI settings from a config.ini file."""
+        config = configparser.ConfigParser()
+        try:
+            config.read('config.ini')
+            if 'SETTINGS' in config:
+                settings = config['SETTINGS']
+                self.query_text.delete("1.0", tk.END)
+                self.query_text.insert("1.0", settings.get('query_text', ''))
+                self.num_images_entry.delete(0, tk.END)
+                self.num_images_entry.insert(0, settings.get('num_images', '10'))
+                
+                self.img_size_combobox.set(settings.get('img_size', IMG_SIZE_OPTIONS[0]))
+                self.img_type_combobox.set(settings.get('img_type', IMG_TYPE_OPTIONS[0]))
+                self.img_color_type_combobox.set(settings.get('img_color_type', IMG_COLOR_TYPE_OPTIONS[0]))
+                self.file_type_combobox.set(settings.get('file_type', FILE_TYPE_OPTIONS[0]))
+                self.safe_search_combobox.set(settings.get('safe_search', SAFE_SEARCH_OPTIONS[0]))
+                
+                self.save_dir_entry.delete(0, tk.END)
+                self.save_dir_entry.insert(0, settings.get('save_directory', os.getcwd())) # Default to current working directory
+            self.log("Settings loaded from config.ini", "info")
+        except Exception as e:
+            self.log(f"Error loading settings: {e}", "warning")
 
     # --- GUI Setup ---
 
@@ -397,49 +453,68 @@ class ImageSearchApp:
         """Builds the entire graphical user interface."""
         self.root.title("Modern Image Search")
         self.root.geometry("950x700")
-        self.root.configure(bg=COLORS["bg_light"])
+        self.root.configure(bg=COLORS["bg_dark"]) # Changed to bg_dark for overall dark theme
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
 
         # --- Styles ---
         style = ttk.Style()
         style.theme_use('clam')
-        style.configure("TProgressbar", thickness=25, troughcolor=COLORS["bg_light"], background=COLORS["primary"])
-        style.configure("TCombobox", fieldbackground="white", background=COLORS["bg_light"], foreground=COLORS["text_dark"], arrowcolor=COLORS["primary"], selectbackground=COLORS["primary"], selectforeground="white")
-        style.map('TCombobox', fieldbackground=[('readonly', 'white')])
+
+        # General style for rounded corners and dark theme
+        style.configure("RoundedFrame.TFrame", background=COLORS["bg_light"], relief="flat", borderwidth=0)
+        style.configure("RoundedLabelFrame.TLabelframe", background=COLORS["bg_light"], foreground=COLORS["text_dark"], relief="flat", borderwidth=0)
+        style.configure("RoundedLabelFrame.TLabelframe.Label", background=COLORS["bg_light"], foreground=COLORS["text_dark"])
+
+        style.configure("TProgressbar", thickness=25, troughcolor=COLORS["bg_dark"], background=COLORS["primary"], borderwidth=0, relief="flat")
+        style.configure("TCombobox", fieldbackground=COLORS["bg_dark"], background=COLORS["bg_dark"], foreground=COLORS["text_dark"], arrowcolor=COLORS["primary"], selectbackground=COLORS["primary_dark"], selectforeground="white", borderwidth=0, relief="flat")
+        style.map('TCombobox', fieldbackground=[('readonly', COLORS["bg_dark"])])
+
+        # Style for buttons to have rounded appearance
+        style.configure("TButton",
+                        background=COLORS["primary"],
+                        foreground=COLORS["text_light"],
+                        font=("Helvetica", 10, "bold"),
+                        relief="flat",
+                        borderwidth=0,
+                        focusthickness=0,
+                        focuscolor=COLORS["primary_dark"])
+        style.map("TButton",
+                  background=[('active', COLORS["primary_dark"])],
+                  foreground=[('disabled', COLORS["text_dark"])])
 
         title_font = ("Helvetica", 16, "bold")
         heading_font = ("Helvetica", 12, "bold")
         normal_font = ("Helvetica", 10)
 
         # --- Main Layout ---
-        main_frame = tk.Frame(self.root, bg=COLORS["bg_light"], padx=20, pady=20)
+        main_frame = tk.Frame(self.root, bg=COLORS["bg_dark"], padx=20, pady=20) # Changed to bg_dark
         main_frame.pack(fill=tk.BOTH, expand=True)
 
-        tk.Label(main_frame, text="Image Search & Download", font=title_font, bg=COLORS["bg_light"], fg=COLORS["primary"]).pack(pady=(0, 15))
+        tk.Label(main_frame, text="Image Search & Download", font=title_font, bg=COLORS["bg_dark"], fg=COLORS["primary"]).pack(pady=(0, 15)) # Changed to bg_dark
 
-        left_panel = tk.Frame(main_frame, bg=COLORS["bg_light"], padx=10, pady=10)
+        left_panel = tk.Frame(main_frame, bg=COLORS["bg_dark"], padx=10, pady=10) # Changed to bg_dark
         left_panel.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        right_panel = tk.Frame(main_frame, bg=COLORS["bg_dark"], padx=10, pady=10, width=300)
+        right_panel = tk.Frame(main_frame, bg=COLORS["bg_dark"], padx=10, pady=10, width=300) # Already bg_dark
         right_panel.pack(side=tk.RIGHT, fill=tk.Y)
         right_panel.pack_propagate(False)
 
         # --- Search Queries ---
-        query_frame = tk.LabelFrame(left_panel, text="Search Queries", font=heading_font, bg=COLORS["bg_light"], fg=COLORS["text_dark"], padx=10, pady=10)
+        query_frame = tk.LabelFrame(left_panel, text="Search Queries", font=heading_font, bg=COLORS["bg_light"], fg=COLORS["text_dark"], padx=10, pady=10, relief="flat", borderwidth=0) # Changed bg and added relief/borderwidth
         query_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
         tk.Label(query_frame, text="Enter search queries (one per line):", bg=COLORS["bg_light"], fg=COLORS["text_dark"], font=normal_font).pack(anchor=tk.W, pady=(5, 5))
-        self.query_text = scrolledtext.ScrolledText(query_frame, width=50, height=8, font=normal_font, bg="white", fg=COLORS["text_dark"])
+        self.query_text = scrolledtext.ScrolledText(query_frame, width=50, height=8, font=normal_font, bg=COLORS["bg_dark"], fg=COLORS["text_light"], insertbackground=COLORS["text_light"], relief="flat", borderwidth=0) # Changed bg/fg/insertbackground/relief/borderwidth
         self.query_text.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
 
         # --- Settings ---
-        settings_frame = tk.LabelFrame(left_panel, text="Settings", font=heading_font, bg=COLORS["bg_light"], fg=COLORS["text_dark"], padx=10, pady=10)
+        settings_frame = tk.LabelFrame(left_panel, text="Settings", font=heading_font, bg=COLORS["bg_light"], fg=COLORS["text_dark"], padx=10, pady=10, relief="flat", borderwidth=0) # Changed bg and added relief/borderwidth
         settings_frame.pack(fill=tk.X, pady=(0, 10))
 
         # --- Number of Images ---
-        num_images_frame = tk.Frame(settings_frame, bg=COLORS["bg_light"])
+        num_images_frame = tk.Frame(settings_frame, bg=COLORS["bg_light"]) # Changed bg
         num_images_frame.pack(fill=tk.X, pady=5)
         tk.Label(num_images_frame, text="Images per query (1-10):", bg=COLORS["bg_light"], fg=COLORS["text_dark"], font=normal_font, width=25, anchor=tk.W).pack(side=tk.LEFT, padx=(0, 10))
-        self.num_images_entry = tk.Entry(num_images_frame, font=normal_font, bg="white", fg=COLORS["text_dark"], width=10)
+        self.num_images_entry = tk.Entry(num_images_frame, font=normal_font, bg=COLORS["bg_dark"], fg=COLORS["text_light"], insertbackground=COLORS["text_light"], relief="flat", borderwidth=0) # Changed bg/fg/insertbackground/relief/borderwidth
         self.num_images_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
         self.num_images_entry.insert(0, "10")
 
@@ -451,49 +526,49 @@ class ImageSearchApp:
         self.safe_search_combobox = self.create_filter_dropdown(settings_frame, "Safe Search:", SAFE_SEARCH_OPTIONS)
 
         # --- Save Directory ---
-        save_dir_frame = tk.Frame(settings_frame, bg=COLORS["bg_light"])
+        save_dir_frame = tk.Frame(settings_frame, bg=COLORS["bg_light"]) # Changed bg
         save_dir_frame.pack(fill=tk.X, pady=5)
         tk.Label(save_dir_frame, text="Save directory:", bg=COLORS["bg_light"], fg=COLORS["text_dark"], font=normal_font, width=25, anchor=tk.W).pack(side=tk.LEFT, padx=(0, 10))
-        self.save_dir_entry = tk.Entry(save_dir_frame, font=normal_font, bg="white", fg=COLORS["text_dark"])
+        self.save_dir_entry = tk.Entry(save_dir_frame, font=normal_font, bg=COLORS["bg_dark"], fg=COLORS["text_light"], insertbackground=COLORS["text_light"], relief="flat", borderwidth=0) # Changed bg/fg/insertbackground/relief/borderwidth
         self.save_dir_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
-        tk.Button(save_dir_frame, text="Browse", font=normal_font, bg=COLORS["bg_dark"], fg=COLORS["text_light"], padx=10, command=self.select_directory).pack(side=tk.LEFT)
+        ttk.Button(save_dir_frame, text="Browse", command=self.select_directory).pack(side=tk.LEFT) # Changed to ttk.Button for styling
 
         # --- Control Buttons ---
-        control_frame = tk.Frame(left_panel, bg=COLORS["bg_light"], pady=10)
+        control_frame = tk.Frame(left_panel, bg=COLORS["bg_dark"], pady=10) # Changed to bg_dark
         control_frame.pack(fill=tk.X)
-        self.search_button = tk.Button(control_frame, text="Search and Save Images", font=heading_font, bg=COLORS["primary"], fg=COLORS["text_light"], padx=10, pady=5, command=self.on_search)
+        self.search_button = ttk.Button(control_frame, text="Search and Save Images", command=self.on_search) # Changed to ttk.Button
         self.search_button.pack(side=tk.LEFT, expand=True, fill=tk.X, padx=(0, 5))
-        self.pause_button = tk.Button(control_frame, text="Pause", font=normal_font, bg=COLORS["secondary"], fg=COLORS["text_light"], padx=10, pady=5, state=tk.DISABLED, command=self.on_pause)
+        self.pause_button = ttk.Button(control_frame, text="Pause", state=tk.DISABLED, command=self.on_pause) # Changed to ttk.Button
         self.pause_button.pack(side=tk.LEFT, expand=True, fill=tk.X, padx=5)
-        self.stop_button = tk.Button(control_frame, text="Stop", font=normal_font, bg=COLORS["accent"], fg=COLORS["text_light"], padx=10, pady=5, state=tk.DISABLED, command=self.on_stop)
+        self.stop_button = ttk.Button(control_frame, text="Stop", state=tk.DISABLED, command=self.on_stop) # Changed to ttk.Button
         self.stop_button.pack(side=tk.LEFT, expand=True, fill=tk.X, padx=(5, 0))
 
         # --- Progress Indicator ---
-        progress_frame = tk.Frame(left_panel, bg=COLORS["bg_light"], pady=5)
+        progress_frame = tk.Frame(left_panel, bg=COLORS["bg_dark"], pady=5) # Changed to bg_dark
         progress_frame.pack(fill=tk.X)
-        self.status_label = tk.Label(progress_frame, text="Status: Ready", font=normal_font, bg=COLORS["bg_light"], fg=COLORS["primary"])
+        self.status_label = tk.Label(progress_frame, text="Status: Ready", font=normal_font, bg=COLORS["bg_dark"], fg=COLORS["primary"]) # Changed to bg_dark
         self.status_label.pack(anchor=tk.W, pady=(0, 5))
         self.progress = ttk.Progressbar(progress_frame, orient="horizontal", length=400, mode="determinate", style="TProgressbar")
         self.progress.pack(fill=tk.X, pady=(0, 10))
-        tk.Button(progress_frame, text="Open Save Location", font=normal_font, bg=COLORS["primary_dark"], fg=COLORS["text_light"], padx=10, pady=5, command=self.open_save_location).pack(anchor=tk.E)
+        ttk.Button(progress_frame, text="Open Save Location", command=self.open_save_location).pack(anchor=tk.E) # Changed to ttk.Button
 
         # --- Output Log ---
-        output_frame = tk.LabelFrame(left_panel, text="Log", font=heading_font, bg=COLORS["bg_light"], fg=COLORS["text_dark"], padx=10, pady=10)
+        output_frame = tk.LabelFrame(left_panel, text="Log", font=heading_font, bg=COLORS["bg_light"], fg=COLORS["text_dark"], padx=10, pady=10, relief="flat", borderwidth=0) # Changed bg and added relief/borderwidth
         output_frame.pack(fill=tk.BOTH, expand=True, pady=(10, 0))
-        self.output_text = scrolledtext.ScrolledText(output_frame, width=80, height=12, font=("Consolas", 9), bg=COLORS["bg_dark"], fg=COLORS["text_light"])
+        self.output_text = scrolledtext.ScrolledText(output_frame, width=80, height=12, font=("Consolas", 9), bg=COLORS["bg_dark"], fg=COLORS["text_light"], insertbackground=COLORS["text_light"], relief="flat", borderwidth=0) # Changed bg/fg/insertbackground/relief/borderwidth
         self.output_text.pack(fill=tk.BOTH, expand=True)
-        self.output_text.tag_configure("success", foreground="#2ecc71")
-        self.output_text.tag_configure("error", foreground="#e74c3c")
-        self.output_text.tag_configure("warning", foreground="#f39c12")
-        self.output_text.tag_configure("info", foreground="#3498db")
-        self.output_text.tag_configure("heading", foreground="#9b59b6", font=("Consolas", 9, "bold"))
+        self.output_text.tag_configure("success", foreground=COLORS["secondary"])
+        self.output_text.tag_configure("error", foreground=COLORS["accent"])
+        self.output_text.tag_configure("warning", foreground="#f39c12") # Keep orange for warning
+        self.output_text.tag_configure("info", foreground=COLORS["primary"])
+        self.output_text.tag_configure("heading", foreground="#9b59b6", font=("Consolas", 9, "bold")) # Keep purple for heading
 
         # --- Preview Area ---
-        preview_frame = tk.LabelFrame(right_panel, text="Image Preview", font=heading_font, bg=COLORS["bg_dark"], fg=COLORS["text_light"], padx=10, pady=10)
+        preview_frame = tk.LabelFrame(right_panel, text="Image Preview", font=heading_font, bg=COLORS["bg_light"], fg=COLORS["text_dark"], padx=10, pady=10, relief="flat", borderwidth=0) # Changed bg and added relief/borderwidth
         preview_frame.pack(fill=tk.BOTH, expand=True)
-        self.preview_label = tk.Label(preview_frame, text="Preview will appear here", bg=COLORS["bg_dark"], fg=COLORS["text_light"], width=30, height=15)
+        self.preview_label = tk.Label(preview_frame, text="Preview will appear here", bg=COLORS["bg_dark"], fg=COLORS["text_light"], width=30, height=15, relief="flat", borderwidth=0) # Changed bg/fg and added relief/borderwidth
         self.preview_label.pack(fill=tk.BOTH, expand=True)
-        tk.Label(right_panel, text="Google Custom Search Image Downloader", font=("Helvetica", 8), bg=COLORS["bg_dark"], fg=COLORS["text_light"]).pack(side=tk.BOTTOM, pady=10)
+        tk.Label(right_panel, text="Google Custom Search Image Downloader", font=("Helvetica", 8), bg=COLORS["bg_dark"], fg=COLORS["text_light"]).pack(side=tk.BOTTOM, pady=10) # Already bg_dark
 
         # --- Initial Instructions ---
         self.log("🔎 Welcome to the Modern Image Search Tool!", "heading")
@@ -504,10 +579,10 @@ class ImageSearchApp:
 
     def create_filter_dropdown(self, parent, label_text, options_list):
         """Helper to create a labeled combobox for filters."""
-        frame = tk.Frame(parent, bg=COLORS["bg_light"])
+        frame = tk.Frame(parent, bg=COLORS["bg_light"]) # Changed bg
         frame.pack(fill=tk.X, pady=2)
         tk.Label(frame, text=label_text, bg=COLORS["bg_light"], fg=COLORS["text_dark"], font=("Helvetica", 10), width=25, anchor=tk.W).pack(side=tk.LEFT, padx=(0, 10))
-        combobox = ttk.Combobox(frame, values=options_list, font=("Helvetica", 10), state="readonly", width=15)
+        combobox = ttk.Combobox(frame, values=options_list, font=("Helvetica", 10), state="readonly", width=10) # Reduced width to 10
         combobox.current(0)
         combobox.pack(side=tk.LEFT, fill=tk.X, expand=True)
         return combobox
